@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<!-- INTERACTIVE JUDGE TOOL — index.html (the page layout).
+     Open this file in a browser to use the tool.
+     The whole chart is one landscape page that shrinks or grows to
+     fit the screen (see fitToScreen in app.js). -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Interactive Judge Tool</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- "viewport" keeps the space for the scaled page; "page" is the chart -->
+  <div class="viewport" id="viewport">
+    <main class="page" id="page">
+
+      <!-- Fighter names -->
+      <header class="fighters">
+        <div class="corner red">Red Fighter</div>
+        <div class="corner blue">Blue Fighter</div>
+      </header>
+
+      <!-- Main needle: Effective Strikes / Effective Grappling -->
+      <section id="main-section"></section>
+
+      <hr class="divider">
+
+      <!-- (10-8) Guidelines: Damage/Impact, Dominance, Duration -->
+      <section id="teneight-panel">
+        <div class="ten-head">
+          <span class="tag">(10-8) Guidelines</span>
+        </div>
+        <p class="guide-line" id="teneight-intro"></p>
+        <p class="guide-line" id="teneight-rule"></p>
+        <div id="teneight-sliders"></div>
+      </section>
+
+      <!-- Effective Aggressiveness + Cage Control -->
+      <section id="backup-section"></section>
+
+      <footer class="page-foot">
+        <button type="button" class="reset" id="reset">Reset</button>
+        <span></span>  <!-- keeps Reset on the left and the credit on the right -->
+        <span class="credit">Created By: Tom Supnet</span>
+      </footer>
+    </main>
+  </div>
+
+  <!-- Popup window for hyperlinked words (outside the page so it is never shrunk) -->
+  <div class="popup-overlay" id="popup" hidden>
+    <div class="popup" role="dialog" aria-modal="true" aria-labelledby="popup-title">
+      <button type="button" class="popup-close" id="popup-close" aria-label="Close">×</button>
+      <h2 id="popup-title"></h2>
+      <div id="popup-body"></div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="definitions.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

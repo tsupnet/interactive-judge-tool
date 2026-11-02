@@ -1,0 +1,202 @@
+/* =====================================================================
+   INTERACTIVE JUDGE TOOL — SETTINGS (config.js)
+   This is the file you will edit most.
+
+   DOT COUNTS (taken from Judging_Tool_Interactive.pdf)
+   - Every section on the chart has 9 small dots + 1 big dot at its
+     outer end = 10 snap points per section.
+   - "dots" below = how many snap points a section has.
+
+   HOW THE NEEDLE MOVES
+   - "ratio" = how many dots the MAIN NEEDLE moves for each dot a
+     slider moves. Example: ratio 1 → each slider dot moves the needle
+     1 dot. ratio 0.5 → every 2 slider dots move the needle 1 dot.
+   - Red sliders push the needle LEFT (toward Red).
+     Blue sliders push the needle RIGHT (toward Blue).
+   - ALL RATIOS ARE 0 FOR NOW. The sliders move, but they will not
+     move the needle until you put in your numbers.
+
+   CAPTIONS
+   - Captions may use <u>underline</u>, <i>italic</i>, <b>bold</b>
+     and <br> (new line), so they look like the chart.
+   ===================================================================== */
+
+window.FSL_CONFIG = {
+
+  /* ---------------- SKIP LINE DOTS -------------------------------------
+     true = every arrow jumps over dots that have a vertical line on them
+     (main needle: dots 2, 8, 10, 12, 18, 20, 30 on each side;
+      side sliders: the big dots at the end of each section).
+     The center dot is never skipped.                                   */
+  skipLineDots: true,
+
+  /* ---------------- PAGE LAYOUT ---------------------------------------
+     sideDotSpacing = space between dots on the 10 side sliders, in
+     pixels (before the page is scaled to fit the screen). Same spacing
+     on every side slider, so Duration is longer than Impact, like the
+     chart.                                                             */
+  layout: {
+    sideDotSpacing: 8.6
+  },
+
+  /* ---------------- MAIN NEEDLE (Effective Strikes / Grappling) -------
+     Zones on EACH side, listed from the center (Draw) outward.
+     parts = the Close / Clearly / Cusp ranges inside a zone.
+     upTo  = the last dot (counted inside the zone) that belongs to
+             that part.
+     ASSUMPTION: a tick mark is the LAST dot of the range on its
+     center side. That makes Close = dots 1-2, Clearly = 3-8,
+     Cusp = 9-10. Change the upTo numbers if you meant it differently. */
+  mainNeedle: {
+    zones: [
+      {
+        score: "10-9", name: "Close Margin", dots: 10,
+        parts: [
+          { label: "Close",   short: "Cl",  upTo: 2 },
+          { label: "Clearly", short: "Clr", upTo: 8 },
+          { label: "Cusp",    short: "Csp", upTo: 10 }
+        ]
+      },
+      {
+        score: "10-8", name: "Large Margin", dots: 10,
+        parts: [
+          { label: "Close",   short: "Cl",  upTo: 2 },
+          { label: "Clearly", short: "Clr", upTo: 8 },
+          { label: "Cusp",    short: "Csp", upTo: 10 }
+        ]
+      },
+      {
+        score: "10-7", name: "Overwhelming", dots: 10,
+        parts: [
+          { label: "Stoppage May Be Warranted", short: "Stop", upTo: 10, underline: true }
+        ]
+      }
+    ]
+  },
+
+  /* ---------------- THE 10 SIDE SLIDERS (5 per corner) ----------------
+     Listed in the same order as your chart.
+     segments   = the sections on each side, from the center outward.
+     labelStyle "span" = label sits over its section (like 10-9)
+     labelStyle "tick" = label sits on the big dot (like 1-Min)
+     boxed: true = drawn inside the black box (Dominance + Duration)
+     group = which rule controls it:
+       "tenEight"       → the (10-8) Guidelines sliders
+       "aggressiveness" → locked unless the needle is at Draw
+       "cage"           → locked unless needle at Draw AND
+                          Red and Blue aggressiveness are equal       */
+  sliders: [
+    {
+      id: "impact",
+      title: "Damage / Impact",
+      term: "impact",
+      group: "tenEight",
+      caption: "Impact includes visible evidence such as swelling and lacerations. Impact shall also be assessed when a fighter’s actions, using striking and/or grappling,<br>lead to a diminishing of their opponent’s energy, confidence, abilities and spirit, even though they may not have dominated the action",
+      labelStyle: "span",
+      segments: [
+        { label: "( 10-9 )", dots: 10 },
+        { label: "( 10-8 )", dots: 10 },
+        { label: "( 10-7 )", dots: 10 }
+      ],
+      /* needleMap = which MAIN NEEDLE dot each Damage / Impact dot moves to.
+         Left number = Impact dot. Right number = main needle dot.
+         Dots 10, 20, 30 are line dots (skipped), so they are not listed.
+         Red works the same way, toward the Red side.
+         (Tom's rule: 1-2 → Close, 3-7 → Clearly one dot at a time,
+          8-9 → Cusp. 10-8 and 10-7 sections work the same way.)
+         NOTE: Tom wrote "8 → 8, 9 → 8". Needle dot 8 has a line on it and
+         is skipped, so 8 and 9 go to dot 9 (the only Cusp dot). Same in
+         the other sections (18, 19 → 19 and 28, 29 → 29).               */
+      needleMap: {
+        // (10-9) Close Margin
+        1: 1,   2: 1,                                  // Close
+        3: 3,   4: 4,   5: 5,   6: 6,   7: 7,          // Clearly
+        8: 9,   9: 9,                                  // Cusp
+        // (10-8) Large Margin
+        11: 11, 12: 11,                                // Close
+        13: 13, 14: 14, 15: 15, 16: 16, 17: 17,        // Clearly
+        18: 19, 19: 19,                                // Cusp
+        // (10-7) Overwhelming
+        21: 21, 22: 21,
+        23: 23, 24: 24, 25: 25, 26: 26, 27: 27,
+        28: 29, 29: 29
+      },
+      ratio: 0   // not used while needleMap is set
+    },
+    {
+      id: "dominance",
+      title: "Dominance",
+      term: "dominance",
+      group: "tenEight",
+      boxed: true,
+      caption: "<i><u>Dominant Striking</u></i> <b>-</b> When the losing fighter is forced to continually defend, with no counters or reaction taken when openings present themselves<br><i><u>Dominant Grappling</u></i> <b>-</b> Utilizing dominant positions to attempt fight ending submissions or attacks. Merely holding a dominant position is not a primary factor",
+      labelStyle: "span",
+      // QUESTION FOR TOM: on your chart, Blue has Low Impact nearest the
+      // center, but Red has HIGH Impact nearest the center. This file
+      // uses Low nearest the center on BOTH sides (mirrored, like
+      // Damage / Impact and Duration). Confirm which is correct.
+      segments: [
+        { label: "Low Impact",    short: "Low",  dots: 10 },
+        { label: "Medium Impact", short: "Med",  dots: 10 },
+        { label: "High Impact",   short: "High", dots: 10 }
+      ],
+      chartLinks: true,   // Low / Medium / High Impact open the Duration vs. Dominance chart
+      ratio: 0
+    },
+    {
+      id: "duration",
+      title: "Duration",
+      term: "duration",
+      group: "tenEight",
+      boxed: true,
+      requires: "dominance",   // locked for a corner until that corner has some Dominance
+      caption: "<u>Amount of time</u> spent by one fighter effectively attacking, controlling, and <i>Impacting</i> their opponent; while the opponent offers little to no offensive<br>Judges assess <i>Duration</i> by recognizing the relative time in a round when one fighter maintains full control of the effective offense whether standing <u>or</u> on the ground",
+      labelStyle: "tick",
+      // 10 dots per minute = each dot is 6 seconds
+      segments: [
+        { label: "(1-Min)", short: "1", dots: 10 },
+        { label: "(2-Min)", short: "2", dots: 10 },
+        { label: "(3-Min)", short: "3", dots: 10 },
+        { label: "(4-Min)", short: "4", dots: 10 },
+        { label: "(5-Min)", short: "5", dots: 10 }
+      ],
+      valueFormat: "time",
+      secondsPerDot: 6,
+      ratio: 0
+    },
+    {
+      id: "aggressiveness",
+      title: "Effective Aggressiveness",
+      term: "aggressiveness",
+      group: "aggressiveness",
+      caption: "<u>Aggressively making attempts to finish the fight <b>-</b> Only used when striking and grappling are even</u>",
+      lockedText: "Locked — only used when Effective Strikes / Grappling are even (needle at Draw).",
+      labelStyle: "span",
+      segments: [{ label: "", dots: 10 }],
+      ratio: 0
+    },
+    {
+      id: "cage",
+      title: "Cage Control",
+      term: "cage",
+      group: "cage",
+      caption: "<u>Dictating the pace, place and position of the fight <b>-</b> Only used when striking, grappling and aggression are even</u>",
+      lockedText: "Locked — only used when striking, grappling AND aggression are even.",
+      labelStyle: "span",
+      segments: [{ label: "", dots: 10 }],
+      ratio: 0
+    }
+  ],
+
+  /* ---------------- (10-8) GUIDELINE RULES -----------------------------
+     Numbers are dot positions counted out from the center.
+     ASSUMPTION: any dot counts as "present". Impact counts as
+     "Significant" from dot 11 (the first dot of the 10-8 section).
+     Change these when you give me your rules.                         */
+  tenEightRules: {
+    impactCountsAt: 1,
+    significantImpactAt: 11,
+    dominanceCountsAt: 1,
+    durationCountsAt: 1
+  }
+};
