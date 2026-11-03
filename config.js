@@ -61,32 +61,54 @@ window.FSL_CONFIG = {
      the LOWER number is used (the higher one is in the note).
      Only the names are shown in the popup — never the dots.
      To add a technique: copy one line, change the name and dots.
-     CHANGED: these lists are the STARTING lists. Techniques can also be
-     added, deleted, renamed (Edit) and re-valued with the gear next to
-     "3 min" (Technique Effectiveness window, then Save). Saved changes
-     stay on that device only and are used instead of the lists below.  */
+     CHANGED: THE REAL LIST NOW LIVES IN techniques.json (in the same
+     folder on GitHub). Every device reads that file when the tool opens,
+     and Save in the Technique Effectiveness window (gear, password)
+     writes to it. The lists below are only a BACKUP, used if
+     techniques.json can't be read (for example, no internet).
+     They match Tom's list of 2026-11-03.                              */
   techniques: {
     strikes: {
       title: "Effective Strikes",
       slider: "impact",
       list: [
-        // CHANGED: highest value at the top. The popup shows them in this order.
-        { name: "Effective knockdown, fighter is hurt and covers up",                dots: 8 },  // 8 or 9
-        { name: "Flash knockdown, fighter gets back up immediately",                 dots: 6 },  // 6 or 7
-        { name: "Effective liver kick, fighter struggles to continue",               dots: 5 },  // 5 or 6
-        { name: "Head strike buckles opponent’s knees",                              dots: 5 },  // 5 or 6
-        { name: "Effective elbow, strike to the head",                               dots: 4 },  // 4 or 5
-        { name: "Hard knee to the body, fighter struggles",                          dots: 4 },  // 4 or 5
-        { name: "Head strike knocks opponent’s head back and fighter moves backwards", dots: 3 },  // 3 or 4
-        { name: "Solid head strike",                                                 dots: 2 },  // 2 or 3
-        { name: "Light head strike",                                                 dots: 1 }   // 1 or 2
+        { name: "Effective knockdown, fighter is hurt and covers up",                  dots: 8 },
+        { name: "Flash knockdown, fighter gets back up immediately",                   dots: 6 },
+        { name: "Effective liver kick, fighter struggles to continue",                 dots: 6 },
+        { name: "Head strike buckles knees - recovers slowly",                         dots: 6 },
+        { name: "Head strike buckles knees - recovers immediately",                    dots: 5 },
+        { name: "Effective elbow, strike to the head",                                 dots: 4 },
+        { name: "Hard knee to the body, fighter struggles",                            dots: 4 },
+        { name: "Head strike knocks opponent’s head back and fighter moves backwards", dots: 3 },
+        { name: "Solid head strike",                                                   dots: 1 },
+        { name: "Light head strike",                                                   dots: 1 }
       ]
     },
     grappling: {
       title: "Effective Grappling",
       slider: "impact",
-      list: []   // empty until Tom picks the grappling techniques
+      list: [
+        { name: "Solid Head Strikes from Crucifix Side-Control", dots: 6 },
+        { name: "Tight Impactful Submission - Close to Tapping",  dots: 5 },
+        { name: "High Amplitude Throw/Takedown",                  dots: 4 },
+        { name: "Solid Head Strikes from Mount",                  dots: 4 },
+        { name: "Effective Takedown",                             dots: 3 },
+        { name: "Glancing Head Strikes from Mount",               dots: 3 },
+        { name: "Straight Wrestling Control",                     dots: 2 },
+        { name: "Takedown",                                       dots: 1 }
+      ]
     }
+  },
+
+  /* ---------------- SHARED LIST ON GITHUB (NEW) -------------------------
+     Where techniques.json lives. Save (with your password) writes the
+     file through GitHub; every device reads it when the tool opens.
+     Change these only if the GitHub project is renamed or moved.       */
+  sync: {
+    owner: "tsupnet",
+    repo: "interactive-judge-tool",
+    branch: "main",
+    file: "techniques.json"
   },
 
   /* ---------------- DURATION RULES (CHANGED) ----------------------------

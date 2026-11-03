@@ -12,9 +12,10 @@
    - NEW: red "Effective Strikes" / "Effective Grappling" open the techniques
      popups (list in config.js → techniques); a technique adds dots to the
      chosen fighter's Damage / Impact slider
-   - CHANGED: gear button beside "3 min" opens Technique Effectiveness, where
-     techniques can be added, deleted, renamed (Edit) and re-valued, then
-     kept with Save (saved in this browser only)
+   - CHANGED: gear button beside "3 min" asks for a password, then opens
+     Technique Effectiveness, where techniques can be added, deleted, renamed
+     (Edit) and re-valued. Save writes them to techniques.json on GitHub,
+     which every device reads when the tool opens.
    - Shrinks/grows the one-page chart to fit the screen
    You should not need to edit this file to change ratios, dots or text.
    ===================================================================== */
@@ -706,6 +707,7 @@
     // NEW: techniques mode = centered title, narrower box
     popupBox.classList.toggle("popup-techniques", !!techMode);
     popupBox.classList.remove("popup-settings");   // CHANGED: only the Settings window is extra wide (added back by openSettings)
+    popupBox.classList.remove("popup-lock");       // CHANGED: password screens (added back when shown)
     popupTitle.textContent = title;
     popupBody.innerHTML = "";
     nodes.forEach(function (n) { popupBody.appendChild(n); });
@@ -804,10 +806,10 @@
   }
 
   // ------------------------------------------------------------------
-  // CHANGED: Technique Effectiveness window (gear beside "3 min") — change values,
-  // ADD, DELETE and EDIT (rename) techniques, then click Save.
-  // The lists in config.js are used until something is saved. Saved changes
-  // stay in this browser on this device only (another computer or iPad keeps its own).
+  // CHANGED: Technique Effectiveness window (gear beside "3 min", password) —
+  // change values, ADD, DELETE and EDIT (rename) techniques, then click Save.
+  // Save writes the shared list (techniques.json) on GitHub for every device —
+  // see "SHARED LIST ON GITHUB + PASSWORD" below. config.js holds a backup list.
   // ------------------------------------------------------------------
   var SETTINGS_KEY = "ijt-techniques-v2";          // CHANGED: now saves whole lists
   var OLD_SETTINGS_KEY = "ijt-technique-values-v1"; // earlier version saved values only
@@ -911,6 +913,13 @@
     editMode = false;
     draftDirty = false;
   }
+  // CHANGED: the window sorts highest value first ONLY when it opens and when
+  // Save is clicked (makeDraft sorts). Nothing moves while − / + / Add are used;
+  // a new technique sits at the bottom of its list until Save.
+  // After Save, every technique that was changed or added flashes yellow once,
+  // so it is easy to see where it landed.
+  var flashNames = null;   // { strikes: { "name": true }, ... } = rows to flash on the next redraw
+
   function markDirty() {
     draftDirty = true;
     var m = popupBody.querySelector(".set-footmsg.ok");   // a new change hides "Saved."
@@ -925,7 +934,7 @@
     var nodes = [cols];
     Object.keys(CFG.techniques || {}).forEach(function (key) {
       var T = CFG.techniques[key];
-      var list = draft[key];
+      var list = draft[key];   // already sorted when the window opened / after Save
       var max = techniqueMax(T);
       var col = el("div", "set-col");
       cols.appendChild(col);
@@ -933,7 +942,8 @@
       if (!list.length) col.appendChild(el("p", "tech-empty", "No techniques yet."));
 
       list.forEach(function (t) {
-        var row = el("div", "set-row");
+        var flash = flashNames && flashNames[key] && flashNames[key][t.name];
+        var row = el("div", "set-row" + (flash ? " moved" : ""));   // "moved" = flashes yellow (after Save)
 
         // Name: plain words, or a typing box in Edit mode
         var name;
@@ -963,7 +973,7 @@
         var st = stepper(t.name, function () { return t.dots; }, function (v) {
           t.dots = v;
           st.val.classList.toggle("changed", !t.orig || t.dots !== t.orig.dots);
-          markDirty();
+          markDirty();   // the row stays where it is until Save
         }, max);
         st.val.classList.toggle("changed", !t.orig || t.dots !== t.orig.dots);
         row.appendChild(st.node);
@@ -1010,7 +1020,7 @@
           return !!silentIfEmpty;
         }
         if (nameTaken(key, nm, null)) { msg.textContent = "That technique is already in the list."; input.focus(); return false; }
-        draft[key].push({ name: nm, dots: newDots, orig: null });
+        draft[key].push({ name: nm, dots: newDots, orig: null });   // bottom of the list until Save
         draftDirty = true;
         input.value = "";
         return true;
@@ -1032,8 +1042,13 @@
     // Bottom line: note on the left, Edit + Save on the right
     var foot = el("div", "set-foot");
     foot.appendChild(el("span", "set-note",
-      "Value = dots added to Damage / Impact. Yellow = not saved yet. Saved on this device only."));
+      "Value = dots added to Damage / Impact. Yellow = not saved yet. Save sends the list to GitHub for all your devices."));
     var btns = el("span", "set-footbtns");
+    // CHANGED: Change password (this device)
+    var chpw = el("button", "set-edit set-chpw", "Change password");
+    chpw.type = "button";
+    chpw.addEventListener("click", showChangePassword);
+    btns.appendChild(chpw);
     // CHANGED: Edit only turns editing ON (no "Done editing"). Save saves and turns it off.
     var edit = el("button", "set-edit" + (editMode ? " on" : ""), "Edit");
     edit.type = "button";
@@ -1066,7 +1081,363 @@
     return draft[key].some(function (x) { return x !== except && x.name.trim().toLowerCase() === low; });
   }
 
-  // Save: check the names, keep the changes on this device (the window stays open)
+  // ==================================================================
+  // CHANGED: SHARED LIST ON GITHUB + PASSWORD
+  // - The technique lists live in techniques.json in the GitHub project.
+  //   Every device reads it when the tool opens (see fetchSharedFromSite).
+  // - The gear asks for a password. The password unlocks this device's
+  //   GitHub key, which is stored on the device SCRAMBLED with the password
+  //   (it cannot be read without the password).
+  // - Save writes techniques.json through GitHub. Other devices get the new
+  //   list the next time the tool is opened or reloaded (usually 1–2 minutes).
+  // - Once unlocked, the gear stays unlocked until the page is closed or reloaded.
+  // ==================================================================
+  var SYNC = CFG.sync || {};
+  var CACHE_KEY = "ijt-shared-cache-v1";   // last shared list seen on this device (opens fast, works offline)
+  var KEY_STORE = "ijt-key-v1";            // this device's GitHub key, scrambled with the password
+  var sessionToken = null;                 // the unlocked key, kept in memory only (gone on reload)
+  var remoteSha = null;                    // which version of techniques.json the window was opened with
+  var MIN_PASSWORD = 6;
+
+  // ---------- reading / using a shared list ----------
+  // Puts a shared list into the tool. Anything broken in the file is skipped.
+  function applyShared(data) {
+    if (!data || typeof data !== "object" || !data.techniques) return false;
+    var used = false;
+    Object.keys(CFG.techniques || {}).forEach(function (key) {
+      var list = data.techniques[key];
+      if (!Array.isArray(list)) return;
+      var max = techniqueMax(CFG.techniques[key]);
+      CFG.techniques[key].list = list.filter(function (t) {
+        return t && typeof t.name === "string" && t.name.trim() &&
+          typeof t.dots === "number" && t.dots >= 1 && t.dots <= max;
+      }).map(function (t) { return { name: t.name.trim().slice(0, NAME_MAX), dots: Math.round(t.dots) }; });
+      used = true;
+    });
+    return used;
+  }
+  function readCache() {
+    try { return JSON.parse(localStorage.getItem(CACHE_KEY) || "null"); } catch (err) { return null; }
+  }
+  function writeCache(data) {
+    try { localStorage.setItem(CACHE_KEY, JSON.stringify(data)); } catch (err) { /* private mode */ }
+  }
+  function currentShared() {
+    var out = { savedAt: new Date().toISOString(), techniques: {} };
+    Object.keys(CFG.techniques || {}).forEach(function (key) { out.techniques[key] = copyList(CFG.techniques[key].list); });
+    return out;
+  }
+  function settingsOpen() { return !overlay.hidden && popupBox.classList.contains("popup-settings"); }
+
+  // When the page opens: get techniques.json from the website (fresh copy).
+  // If this device saved something newer a moment ago, keep that instead.
+  function fetchSharedFromSite() {
+    if (!window.fetch || !SYNC.file) return;
+    fetch(SYNC.file + "?v=" + Date.now(), { cache: "no-store" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        if (!data || !data.techniques) return;
+        var c = readCache();
+        if (c && c.savedAt && data.savedAt && c.savedAt > data.savedAt) return;   // ours is newer
+        if (settingsOpen()) return;   // never change the list under the user's hands
+        if (applyShared(data)) writeCache(data);
+      })
+      .catch(function () { /* no internet, or opened as a local file: keep what we have */ });
+  }
+
+  // ---------- scrambling the GitHub key with the password ----------
+  var cryptoOK = !!(window.crypto && window.crypto.subtle && window.TextEncoder);
+  function bytesToB64(bytes) {
+    var bin = "";
+    for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin);
+  }
+  function b64ToBytes(b64) {
+    var bin = atob(b64), out = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+  function textToB64(s) { return bytesToB64(new TextEncoder().encode(s)); }   // for GitHub (handles ’ and other characters)
+  function b64ToText(b64) { return new TextDecoder().decode(b64ToBytes(b64.replace(/\s/g, ""))); }
+
+  function passwordKey(password, salt) {
+    return crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveKey"])
+      .then(function (base) {
+        return crypto.subtle.deriveKey({ name: "PBKDF2", salt: salt, iterations: 250000, hash: "SHA-256" },
+          base, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+      });
+  }
+  // Store the GitHub key on this device, scrambled with the password
+  function lockToken(token, password) {
+    var salt = crypto.getRandomValues(new Uint8Array(16));
+    var iv = crypto.getRandomValues(new Uint8Array(12));
+    return passwordKey(password, salt).then(function (k) {
+      return crypto.subtle.encrypt({ name: "AES-GCM", iv: iv }, k, new TextEncoder().encode(token));
+    }).then(function (data) {
+      localStorage.setItem(KEY_STORE, JSON.stringify({
+        salt: bytesToB64(salt), iv: bytesToB64(iv), data: bytesToB64(new Uint8Array(data))
+      }));
+    });
+  }
+  // Unscramble the key. Fails (rejects) if the password is wrong.
+  function unlockToken(password) {
+    var s;
+    try { s = JSON.parse(localStorage.getItem(KEY_STORE) || "null"); } catch (err) { s = null; }
+    if (!s) return Promise.reject(new Error("nokey"));
+    return passwordKey(password, b64ToBytes(s.salt)).then(function (k) {
+      return crypto.subtle.decrypt({ name: "AES-GCM", iv: b64ToBytes(s.iv) }, k, b64ToBytes(s.data));
+    }).then(function (plain) { return new TextDecoder().decode(plain); });
+  }
+  function hasStoredKey() {
+    try { return !!localStorage.getItem(KEY_STORE); } catch (err) { return false; }
+  }
+
+  // ---------- talking to GitHub ----------
+  function gh(token, method, path, body) {
+    return fetch("https://api.github.com/repos/" + SYNC.owner + "/" + SYNC.repo + path, {
+      method: method,
+      cache: "no-store",
+      headers: {
+        "Authorization": "Bearer " + token,
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28"
+      },
+      body: body ? JSON.stringify(body) : undefined
+    });
+  }
+  function ghError(status) { var e = new Error("github " + status); e.status = status; return e; }
+  // Read techniques.json straight from GitHub (newest version, no waiting)
+  function ghReadFile(token) {
+    return gh(token, "GET", "/contents/" + SYNC.file + "?ref=" + encodeURIComponent(SYNC.branch)).then(function (r) {
+      if (r.status === 404) return null;   // file not there yet
+      if (!r.ok) throw ghError(r.status);
+      return r.json().then(function (j) { return { sha: j.sha, data: JSON.parse(b64ToText(j.content || "")) }; });
+    });
+  }
+  // Write techniques.json. sha = the version we started from (GitHub refuses if someone saved in between).
+  function ghWriteFile(token, data, sha) {
+    var body = {
+      message: "Update techniques (Technique Effectiveness window)",
+      content: textToB64(JSON.stringify(data, null, 2) + "\n"),
+      branch: SYNC.branch
+    };
+    if (sha) body.sha = sha;
+    return gh(token, "PUT", "/contents/" + SYNC.file, body).then(function (r) {
+      if (!r.ok) throw ghError(r.status);
+      return r.json().then(function (j) { return j.content && j.content.sha; });
+    });
+  }
+  // Setup check: does this key reach the project, and may it change it?
+  function ghCheckKey(token) {
+    return gh(token, "GET", "").then(function (r) {
+      if (!r.ok) throw ghError(r.status);
+      return r.json().then(function (j) {
+        if (j.permissions && j.permissions.push === false) throw ghError("readonly");
+        return true;
+      });
+    });
+  }
+  // Plain-English message for a GitHub problem
+  function ghMessage(err, doing) {
+    var s = err && err.status;
+    if (s === 401) return "GitHub did not accept this key. It may be mistyped, expired or deleted.";
+    if (s === 403 || s === "readonly") return "This key is not allowed to change the project. When creating the key, \"Contents\" must be set to \"Read and write\".";
+    if (s === 404) return "This key cannot reach the " + SYNC.repo + " project. When creating the key, choose \"Only select repositories\" and pick " + SYNC.repo + ".";
+    if (s === 409 || s === 422) return "The list was changed on another device after you opened this window. Close this window and open it again to get the newest list, then make your changes again.";
+    return "Could not reach GitHub" + (doing ? " to " + doing : "") + ". Check the internet connection and try again.";
+  }
+
+  // ---------- small form helpers for the password screens ----------
+  function field(labelText, type, auto) {
+    var wrap = el("label", "lock-field");
+    wrap.appendChild(el("span", "lock-label", labelText));
+    var input = el("input", "set-input lock-input");
+    input.type = type;
+    input.autocomplete = auto || "off";
+    input.spellcheck = false;
+    wrap.appendChild(input);
+    return { node: wrap, input: input };
+  }
+  function lockButton(text, cls) {
+    var b = el("button", cls || "lock-btn", text);
+    b.type = "button";
+    return b;
+  }
+  function onEnter(inputs, fn) {
+    inputs.forEach(function (i) { i.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); fn(); } }); });
+  }
+  function showPanel(nodes, focusInput) {
+    openPopup("Technique Effectiveness", nodes, false, true);
+    popupBox.classList.add("popup-lock");
+    if (focusInput) focusInput.focus();
+  }
+
+  // ---------- the gear ----------
+  function openSettings() {
+    if (!cryptoOK) {
+      openPopup("Technique Effectiveness", [el("p", null,
+        "This browser can't keep the password safe. Please use a current version of Safari or Chrome.")], false, true);
+      return;
+    }
+    if (sessionToken) { openEditor(); return; }   // already unlocked since the page opened
+    if (hasStoredKey()) showUnlock(); else showSetup();
+  }
+
+  // Password screen
+  function showUnlock() {
+    var form = el("div", "lock-form");
+    form.appendChild(el("p", "lock-intro", "Enter your password to change the techniques."));
+    var pw = field("Password", "password", "current-password");
+    form.appendChild(pw.node);
+    var msg = el("p", "set-msg");
+    var go = lockButton("Unlock", "lock-btn lock-main");
+    function tryUnlock() {
+      if (!pw.input.value) { msg.textContent = "Type your password."; return; }
+      go.disabled = true; msg.textContent = "";
+      unlockToken(pw.input.value).then(function (token) {
+        sessionToken = token;
+        openEditor();
+      }).catch(function () {
+        go.disabled = false;
+        msg.textContent = "Wrong password.";
+        pw.input.select();
+      });
+    }
+    go.addEventListener("click", tryUnlock);
+    onEnter([pw.input], tryUnlock);
+    form.appendChild(go);
+    form.appendChild(msg);
+    var forgot = lockButton("Forgot password? Set up this device again", "lock-link");
+    forgot.addEventListener("click", function () { showSetup(true); });
+    form.appendChild(forgot);
+    showPanel([form], pw.input);
+  }
+
+  // One-time setup on each device: GitHub key + choose a password
+  function showSetup(again) {
+    var form = el("div", "lock-form");
+    form.appendChild(el("p", "lock-intro", again
+      ? "Paste your GitHub key and choose a new password. (The old password stops working on this device.)"
+      : "One-time setup for this device. Paste your GitHub key and choose a password."));
+    var key = field("GitHub key", "password", "off");
+    key.input.placeholder = "github_pat_…";
+    var pw1 = field("Choose a password (at least " + MIN_PASSWORD + " characters)", "password", "new-password");
+    var pw2 = field("Type the password again", "password", "new-password");
+    form.appendChild(key.node);
+    form.appendChild(pw1.node);
+    form.appendChild(pw2.node);
+    var msg = el("p", "set-msg");
+    var go = lockButton("Set up", "lock-btn lock-main");
+    function trySetup() {
+      var token = key.input.value.trim();
+      if (!token) { msg.textContent = "Paste your GitHub key."; return; }
+      if (pw1.input.value.length < MIN_PASSWORD) { msg.textContent = "The password needs at least " + MIN_PASSWORD + " characters."; return; }
+      if (pw1.input.value !== pw2.input.value) { msg.textContent = "The two passwords are not the same."; return; }
+      go.disabled = true;
+      msg.classList.remove("ok");
+      msg.textContent = "Checking the key with GitHub…";
+      ghCheckKey(token).then(function () {
+        return lockToken(token, pw1.input.value);
+      }).then(function () {
+        sessionToken = token;
+        openEditor();
+      }).catch(function (err) {
+        go.disabled = false;
+        msg.textContent = ghMessage(err, "check the key");
+      });
+    }
+    go.addEventListener("click", trySetup);
+    onEnter([key.input, pw1.input, pw2.input], trySetup);
+    form.appendChild(go);
+    form.appendChild(msg);
+    if (again && hasStoredKey()) {
+      var back = lockButton("Back to password", "lock-link");
+      back.addEventListener("click", showUnlock);
+      form.appendChild(back);
+    }
+    showPanel([form], key.input);
+  }
+
+  // Change password (from the Technique Effectiveness window). Applies to THIS device.
+  function showChangePassword() {
+    var form = el("div", "lock-form");
+    form.appendChild(el("p", "lock-intro",
+      "Change the password on this device. Each Mac, iPhone and iPad has its own password — change it on each one you use."));
+    var cur = field("Current password", "password", "current-password");
+    var pw1 = field("New password (at least " + MIN_PASSWORD + " characters)", "password", "new-password");
+    var pw2 = field("Type the new password again", "password", "new-password");
+    form.appendChild(cur.node);
+    form.appendChild(pw1.node);
+    form.appendChild(pw2.node);
+    var msg = el("p", "set-msg");
+    var row = el("div", "lock-row");
+    var back = lockButton("Back to techniques");
+    var go = lockButton("Save new password", "lock-btn lock-main");
+    function tryChange() {
+      msg.classList.remove("ok");
+      if (pw1.input.value.length < MIN_PASSWORD) { msg.textContent = "The new password needs at least " + MIN_PASSWORD + " characters."; return; }
+      if (pw1.input.value !== pw2.input.value) { msg.textContent = "The two new passwords are not the same."; return; }
+      go.disabled = true; msg.textContent = "";
+      unlockToken(cur.input.value).then(function (token) {
+        return lockToken(token, pw1.input.value);
+      }).then(function () {
+        go.disabled = false;
+        cur.input.value = pw1.input.value = pw2.input.value = "";
+        msg.classList.add("ok");
+        msg.textContent = "Password changed on this device.";
+      }).catch(function () {
+        go.disabled = false;
+        msg.textContent = "The current password is wrong.";
+        cur.input.select();
+      });
+    }
+    go.addEventListener("click", tryChange);
+    onEnter([cur.input, pw1.input, pw2.input], tryChange);
+    back.addEventListener("click", function () {
+      popupBox.classList.remove("popup-lock");
+      redrawSettings();   // the techniques window, with any unsaved changes still there
+    });
+    row.appendChild(back);
+    row.appendChild(go);
+    form.appendChild(row);
+    form.appendChild(msg);
+    popupBody.innerHTML = "";
+    popupBody.appendChild(form);
+    popupBox.classList.add("popup-lock");
+    cur.input.focus();
+  }
+
+  // The Technique Effectiveness window: first get the newest list from GitHub
+  function openEditor() {
+    openPopup("Technique Effectiveness", [el("p", "lock-intro", "Getting the newest list from GitHub…")], false, true);
+    popupBox.classList.add("popup-settings");
+    ghReadFile(sessionToken).then(function (file) {
+      if (file && applyShared(file.data)) writeCache(file.data);
+      remoteSha = file ? file.sha : null;
+      flashNames = null;
+      makeDraft();
+      redrawSettings();
+    }).catch(function (err) {
+      var form = el("div", "lock-form");
+      form.appendChild(el("p", "set-msg", ghMessage(err, "get the list")));
+      var row = el("div", "lock-row");
+      var retry = lockButton("Try again", "lock-btn lock-main");
+      retry.addEventListener("click", openEditor);
+      row.appendChild(retry);
+      if (err && (err.status === 401 || err.status === 403 || err.status === 404)) {
+        var again = lockButton("Set up this device again");
+        again.addEventListener("click", function () { sessionToken = null; showSetup(true); });
+        row.appendChild(again);
+      }
+      form.appendChild(row);
+      popupBody.innerHTML = "";
+      popupBody.appendChild(form);
+      popupBox.classList.remove("popup-settings");
+      popupBox.classList.add("popup-lock");
+    });
+  }
+
+  // Save: check the names, then write the list to GitHub (the window stays open)
   function saveDraft() {
     var msg = footMsg();
     msg.classList.remove("ok");   // problem messages are red, not green
@@ -1089,30 +1460,49 @@
       if (!editMode) { editMode = true; redrawSettings(); footMsg().textContent = problem; }
       return;
     }
+    // The list to send, sorted highest value first
+    var data = { savedAt: new Date().toISOString(), techniques: {} };
     Object.keys(draft).forEach(function (key) {
-      CFG.techniques[key].list = draft[key].map(function (t) {
-        return { name: t.name.trim().slice(0, NAME_MAX), dots: t.dots };
+      data.techniques[key] = draft[key]
+        .map(function (t, i) { return { t: t, i: i }; })
+        .sort(function (a, b) { return (b.t.dots - a.t.dots) || (a.i - b.i); })
+        .map(function (x) { return { name: x.t.name.trim().slice(0, NAME_MAX), dots: x.t.dots }; });
+    });
+    // Which techniques were changed or added (they flash yellow after Save)
+    var flashing = {};
+    Object.keys(draft).forEach(function (key) {
+      flashing[key] = {};
+      draft[key].forEach(function (t) {
+        if (!t.orig || t.dots !== t.orig.dots || t.name.trim() !== t.orig.name) flashing[key][t.name.trim()] = true;
       });
     });
-    saveTechniqueValues();
-    // CHANGED: the window stays open after Save. Start fresh from what was just
-    // saved (yellow marks clear, Save turns white, editing turns off) and show "Saved."
-    makeDraft();   // also sets editMode = false
-    redrawSettings();
-    var done = footMsg();
-    done.classList.add("ok");
-    done.textContent = "Saved.";
-  }
-
-  function openSettings() {
-    makeDraft();
-    openPopup("Technique Effectiveness", settingsNodes(), false, true);   // title is blue (styles.css)
-    popupBox.classList.add("popup-settings");   // wider, two columns
+    var save = popupBody.querySelector(".set-save");
+    if (save) save.disabled = true;
+    msg.textContent = "Saving to GitHub…";
+    msg.classList.add("busy");
+    ghWriteFile(sessionToken, data, remoteSha).then(function (newSha) {
+      remoteSha = newSha || remoteSha;
+      applyShared(data);
+      writeCache(data);
+      // The window stays open: start fresh from what was just saved (sorted)
+      makeDraft();   // sorts, and sets editMode = false
+      flashNames = flashing;
+      redrawSettings();
+      var done = footMsg();
+      done.classList.add("ok");
+      done.textContent = "Saved to GitHub. Your other devices get it the next time the tool is opened or reloaded (usually 1–2 minutes).";
+    }).catch(function (err) {
+      if (save) save.disabled = false;
+      msg.classList.remove("busy");
+      msg.textContent = ghMessage(err, "save") + " Nothing was saved yet — your changes are still here.";
+    });
   }
   // Redraw the window in place (after Add / Delete / Edit).
   // focusKey = put the cursor back in that section's "new technique" box (after Add).
   // focusFirstName = put the cursor in the first name box (after Edit).
   function redrawSettings(focusKey, focusFirstName) {
+    popupBox.classList.remove("popup-lock");
+    popupBox.classList.add("popup-settings");
     var scroll = popupBox.scrollTop;
     popupBody.innerHTML = "";
     settingsNodes().forEach(function (n) { popupBody.appendChild(n); });
@@ -1122,7 +1512,13 @@
     var target = null;
     if (focusKey) target = popupBody.querySelector('.set-add[data-key="' + focusKey + '"] .set-input');
     else if (focusFirstName) target = popupBody.querySelector(".set-rename");
-    (target || popupClose).focus();
+    (target || popupClose).focus({ preventScroll: true });
+    // After Add, keep the new technique (bottom of the list) in view
+    if (focusKey) {
+      var addRow = popupBody.querySelector('.set-add[data-key="' + focusKey + '"]');
+      if (addRow && addRow.scrollIntoView) addRow.scrollIntoView({ block: "nearest" });
+    }
+    flashNames = null;
   }
   document.getElementById("settings").addEventListener("click", openSettings);
 
@@ -1264,7 +1660,10 @@
     });
   }
 
-  loadTechniqueValues();   // CHANGED: apply values saved in Settings
+  loadTechniqueValues();   // config.js backup list (and any old device-only list)
+  // CHANGED: the last shared list this device saw (opens instantly, works offline) ...
+  var cachedShared = readCache();
+  if (cachedShared) applyShared(cachedShared);
   buildMain();
   buildGuidelineText();
   buildSliders();
@@ -1273,4 +1672,6 @@
   fitToScreen();
   // Fonts can load a moment later and change the page height
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitToScreen);
+  // CHANGED: ... then get the newest shared list (techniques.json) from the website
+  fetchSharedFromSite();
 })();

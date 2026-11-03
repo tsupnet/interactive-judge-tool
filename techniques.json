@@ -1,0 +1,27 @@
+{
+  "savedAt": "2026-11-03T22:50:00.000Z",
+  "techniques": {
+    "strikes": [
+      { "name": "Effective knockdown, fighter is hurt and covers up", "dots": 8 },
+      { "name": "Flash knockdown, fighter gets back up immediately", "dots": 6 },
+      { "name": "Effective liver kick, fighter struggles to continue", "dots": 6 },
+      { "name": "Head strike buckles knees - recovers slowly", "dots": 6 },
+      { "name": "Head strike buckles knees - recovers immediately", "dots": 5 },
+      { "name": "Effective elbow, strike to the head", "dots": 4 },
+      { "name": "Hard knee to the body, fighter struggles", "dots": 4 },
+      { "name": "Head strike knocks opponent’s head back and fighter moves backwards", "dots": 3 },
+      { "name": "Solid head strike", "dots": 1 },
+      { "name": "Light head strike", "dots": 1 }
+    ],
+    "grappling": [
+      { "name": "Solid Head Strikes from Crucifix Side-Control", "dots": 6 },
+      { "name": "Tight Impactful Submission - Close to Tapping", "dots": 5 },
+      { "name": "High Amplitude Throw/Takedown", "dots": 4 },
+      { "name": "Solid Head Strikes from Mount", "dots": 4 },
+      { "name": "Effective Takedown", "dots": 3 },
+      { "name": "Glancing Head Strikes from Mount", "dots": 3 },
+      { "name": "Straight Wrestling Control", "dots": 2 },
+      { "name": "Takedown", "dots": 1 }
+    ]
+  }
+}

@@ -358,6 +358,31 @@ body {
 .set-save.dirty { background: var(--tag); }                           /* yellow = changes not saved yet */
 .set-name.changed { background: var(--tag); }
 .set-input.changed { background: #fff9c4; }
+/* CHANGED: password screens (setup, unlock, change password) */
+.popup.popup-techniques.popup-lock { max-width: 520px; }
+.popup.popup-lock h2 { color: var(--blue); }
+.lock-form { display: flex; flex-direction: column; gap: 12px; max-width: 440px; margin: 0 auto; }
+.popup p.lock-intro { text-align: center; font-size: 16px; margin: 0 0 4px; }
+.lock-field { display: flex; flex-direction: column; gap: 4px; font-family: var(--sans); font-size: 14px; font-weight: 700; }
+.lock-input { width: 100%; font-family: var(--sans); }
+.lock-btn {
+  font-family: var(--sans); font-size: 15px; font-weight: 700; padding: 9px 18px;
+  border: 1.5px solid var(--ink); background: #fff; cursor: pointer;
+}
+.lock-btn:hover:not(:disabled) { background: var(--link-hover); }
+.lock-btn:disabled { opacity: .5; cursor: wait; }
+.lock-main { background: var(--tag); }
+.lock-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.lock-link {
+  appearance: none; -webkit-appearance: none; background: none; border: 0; padding: 4px;
+  font-family: var(--serif); font-size: 15px; color: var(--blue); text-decoration: underline; cursor: pointer;
+}
+.popup p.set-msg.ok { color: #1a7f2e; font-weight: 700; }
+.popup p.set-msg.busy { color: var(--muted); }
+.set-save:disabled { opacity: .5; cursor: wait; }
+/* CHANGED: a technique that was just added or moved to its sorted place flashes yellow */
+.set-row.moved { animation: set-flash 1.6s ease-out; }
+@keyframes set-flash { 0%, 30% { background: var(--tag); } 100% { background: transparent; } }
 .set-rename { resize: none; overflow: hidden; line-height: 1.25; display: block; }   /* name box in Edit mode wraps */
 .popup p.set-footmsg { text-align: right; margin-top: 6px; }
 .popup p.set-footmsg.ok { color: #1a7f2e; font-weight: 700; }   /* CHANGED: green "Saved." */
