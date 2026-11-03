@@ -12,8 +12,9 @@
    - NEW: red "Effective Strikes" / "Effective Grappling" open the techniques
      popups (list in config.js → techniques); a technique adds dots to the
      chosen fighter's Damage / Impact slider
-   - CHANGED: gear button beside "3 min" opens Settings, where techniques
-     can be added, deleted, and their values changed (saved in this browser only)
+   - CHANGED: gear button beside "3 min" opens Technique Effectiveness, where
+     techniques can be added, deleted, renamed (Edit) and re-valued, then
+     kept with Save (saved in this browser only)
    - Shrinks/grows the one-page chart to fit the screen
    You should not need to edit this file to change ratios, dots or text.
    ===================================================================== */
@@ -803,11 +804,10 @@
   }
 
   // ------------------------------------------------------------------
-  // CHANGED: Settings (gear beside "3 min") — change values, ADD and DELETE techniques.
-  // The lists in config.js are the defaults. Changes are saved in this
-  // browser on this device only (another computer or iPad keeps its own).
-  // "Restore defaults" goes back to the config.js lists (added techniques
-  // are removed and deleted ones come back).
+  // CHANGED: Technique Effectiveness window (gear beside "3 min") — change values,
+  // ADD, DELETE and EDIT (rename) techniques, then click Save.
+  // The lists in config.js are used until something is saved. Saved changes
+  // stay in this browser on this device only (another computer or iPad keeps its own).
   // ------------------------------------------------------------------
   var SETTINGS_KEY = "ijt-techniques-v2";          // CHANGED: now saves whole lists
   var OLD_SETTINGS_KEY = "ijt-technique-values-v1"; // earlier version saved values only
@@ -816,10 +816,6 @@
 
   function copyList(list) {
     return (list || []).map(function (t) { return { name: String(t.name), dots: Number(t.dots) || 1 }; });
-  }
-  function defaultFor(key, name) {
-    var d = (defaultLists[key] || []).filter(function (x) { return x.name === name; })[0];
-    return d ? d.dots : null;   // null = not in config.js (added in Settings)
   }
 
   // Remember the config.js lists, then use any lists saved in Settings
@@ -897,34 +893,82 @@
     return { node: wrap, val: val, show: show };
   }
 
+  // CHANGED: changes in the Technique Effectiveness window are NOT kept until
+  // "Save" is clicked. Closing the window (× / Esc / clicking outside) without
+  // Save throws the changes away. "Edit" turns the technique names into boxes
+  // so the words can be changed. ("Restore defaults" was removed.)
+  var draft = null;        // working copy while the window is open
+  var editMode = false;    // true = names can be typed over
+  var draftDirty = false;  // true = something changed since the window opened
+
+  function makeDraft() {
+    draft = {};
+    Object.keys(CFG.techniques || {}).forEach(function (key) {
+      draft[key] = sortedTechniques(CFG.techniques[key]).map(function (t) {
+        return { name: t.name, dots: t.dots, orig: { name: t.name, dots: t.dots } };
+      });
+    });
+    editMode = false;
+    draftDirty = false;
+  }
+  function markDirty() {
+    draftDirty = true;
+    var m = popupBody.querySelector(".set-footmsg.ok");   // a new change hides "Saved."
+    if (m) { m.textContent = ""; m.classList.remove("ok"); }
+    var save = popupBody.querySelector(".set-save");
+    if (save) save.classList.add("dirty");
+  }
+
   function settingsNodes() {
-    // CHANGED: Effective Strikes and Effective Grappling side by side (one column each)
+    // Effective Strikes and Effective Grappling side by side (one column each)
     var cols = el("div", "set-cols");
     var nodes = [cols];
     Object.keys(CFG.techniques || {}).forEach(function (key) {
       var T = CFG.techniques[key];
+      var list = draft[key];
       var max = techniqueMax(T);
       var col = el("div", "set-col");
       cols.appendChild(col);
       col.appendChild(el("div", "set-head", T.title));
-      if (!(T.list || []).length) col.appendChild(el("p", "tech-empty", "No techniques yet."));
+      if (!list.length) col.appendChild(el("p", "tech-empty", "No techniques yet."));
 
-      // One row per technique, highest value at the top
-      sortedTechniques(T).forEach(function (t) {
+      list.forEach(function (t) {
         var row = el("div", "set-row");
-        var def = defaultFor(key, t.name);
-        var name = el("span", "set-name", t.name);
-        if (def === null) name.appendChild(el("span", "set-new", " (added)"));
+
+        // Name: plain words, or a typing box in Edit mode
+        var name;
+        function nameChanged() { return !t.orig || t.name !== t.orig.name; }
+        if (editMode) {
+          // A box that wraps onto more lines, so long names are fully visible
+          name = el("textarea", "set-input set-rename");
+          name.rows = 1;
+          name.maxLength = NAME_MAX;
+          name.value = t.name;
+          name.setAttribute("aria-label", "Technique name");
+          name.addEventListener("keydown", function (e) { if (e.key === "Enter") e.preventDefault(); });   // names are one line
+          name.addEventListener("input", function () {
+            if (/[\r\n]/.test(name.value)) name.value = name.value.replace(/[\r\n]+/g, " ");
+            fitHeight(name);
+            t.name = name.value;
+            name.classList.toggle("changed", nameChanged());
+            footMsg().textContent = "";
+            markDirty();
+          });
+        } else {
+          name = el("span", "set-name", t.name);
+        }
+        name.classList.toggle("changed", nameChanged());   // yellow = not saved yet
         row.appendChild(name);
+
         var st = stepper(t.name, function () { return t.dots; }, function (v) {
           t.dots = v;
-          saveTechniqueValues();
-          st.val.classList.toggle("changed", def === null || t.dots !== def);
+          st.val.classList.toggle("changed", !t.orig || t.dots !== t.orig.dots);
+          markDirty();
         }, max);
-        st.val.classList.toggle("changed", def === null || t.dots !== def);
+        st.val.classList.toggle("changed", !t.orig || t.dots !== t.orig.dots);
         row.appendChild(st.node);
 
-        // Delete: first tap asks "Delete?", second tap deletes
+        // Delete: first tap asks "Delete?", second tap removes it (kept only after Save)
         var del = el("button", "set-del", "Delete");
         del.type = "button";
         del.setAttribute("aria-label", "Delete technique: " + t.name);
@@ -934,8 +978,8 @@
             del.textContent = "Delete?";
             return;
           }
-          T.list = T.list.filter(function (x) { return x !== t; });
-          saveTechniqueValues();
+          draft[key] = draft[key].filter(function (x) { return x !== t; });
+          draftDirty = true;
           redrawSettings();
         });
         del.addEventListener("blur", function () {   // tapping somewhere else cancels
@@ -948,7 +992,7 @@
 
       // Add a new technique: name, value, Add button
       var addRow = el("div", "set-row set-add");
-      var input = el("input", "set-input");
+      var input = el("input", "set-input set-newname");
       input.type = "text";
       input.maxLength = NAME_MAX;
       input.placeholder = "New technique name";
@@ -958,69 +1002,127 @@
       var add = el("button", "set-addbtn", "Add");
       add.type = "button";
       var msg = el("p", "set-msg");
-      function tryAdd() {
+      // Returns true if added (or nothing typed). Shows a message if not.
+      function tryAdd(silentIfEmpty) {
         var nm = input.value.trim();
-        if (!nm) { msg.textContent = "Type a name first."; input.focus(); return; }
-        var dup = T.list.some(function (x) { return x.name.toLowerCase() === nm.toLowerCase(); });
-        if (dup) { msg.textContent = "That technique is already in the list."; input.focus(); return; }
-        T.list.push({ name: nm, dots: newDots });
-        saveTechniqueValues();
-        redrawSettings(key);
+        if (!nm) {
+          if (!silentIfEmpty) { msg.textContent = "Type a name first."; input.focus(); }
+          return !!silentIfEmpty;
+        }
+        if (nameTaken(key, nm, null)) { msg.textContent = "That technique is already in the list."; input.focus(); return false; }
+        draft[key].push({ name: nm, dots: newDots, orig: null });
+        draftDirty = true;
+        input.value = "";
+        return true;
       }
-      add.addEventListener("click", tryAdd);
-      input.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); tryAdd(); } });
+      add.addEventListener("click", function () { if (tryAdd(false)) redrawSettings(key); });
+      input.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") { e.preventDefault(); if (tryAdd(false)) redrawSettings(key); }
+      });
       input.addEventListener("input", function () { msg.textContent = ""; });
       addRow.appendChild(input);
       addRow.appendChild(st2.node);
       addRow.appendChild(add);
       addRow.dataset.key = key;
+      addRow._tryAdd = tryAdd;   // Save also adds a name that was typed but not added yet
       col.appendChild(addRow);
       col.appendChild(msg);
     });
 
+    // Bottom line: note on the left, Edit + Save on the right
     var foot = el("div", "set-foot");
     foot.appendChild(el("span", "set-note",
-      "Value = dots added to Damage / Impact. Yellow = changed or added. Saved on this device only."));
-    var restore = el("button", "set-restore", "Restore defaults");
-    restore.type = "button";
-    restore.addEventListener("click", function () {
-      if (!restore.classList.contains("confirm")) {   // first tap asks, second tap restores
-        restore.classList.add("confirm");
-        restore.textContent = "Restore? Added techniques will be removed";
-        return;
-      }
-      Object.keys(CFG.techniques || {}).forEach(function (key) {
-        CFG.techniques[key].list = copyList(defaultLists[key]);
-      });
-      saveTechniqueValues();
-      redrawSettings();
+      "Value = dots added to Damage / Impact. Yellow = not saved yet. Saved on this device only."));
+    var btns = el("span", "set-footbtns");
+    // CHANGED: Edit only turns editing ON (no "Done editing"). Save saves and turns it off.
+    var edit = el("button", "set-edit" + (editMode ? " on" : ""), "Edit");
+    edit.type = "button";
+    edit.setAttribute("aria-pressed", editMode ? "true" : "false");
+    edit.addEventListener("click", function () {
+      if (editMode) return;   // already editing: click Save when finished
+      editMode = true;
+      redrawSettings(null, true);
     });
-    restore.addEventListener("blur", function () {
-      restore.classList.remove("confirm");
-      restore.textContent = "Restore defaults";
-    });
-    foot.appendChild(restore);
+    var save = el("button", "set-save" + (draftDirty ? " dirty" : ""), "Save");
+    save.type = "button";
+    save.addEventListener("click", saveDraft);
+    btns.appendChild(edit);
+    btns.appendChild(save);
+    foot.appendChild(btns);
     nodes.push(foot);
+    nodes.push(el("p", "set-msg set-footmsg"));
     return nodes;
+  }
+  function footMsg() { return popupBody.querySelector(".set-footmsg") || el("p"); }
+  // Grow a name box to show every line of its text
+  function fitHeight(box) {
+    box.style.height = "auto";
+    box.style.height = (box.scrollHeight + 2) + "px";
+  }
+
+  // Is this name already used by ANOTHER technique in the same list? (capital letters don't matter)
+  function nameTaken(key, nm, except) {
+    var low = nm.trim().toLowerCase();
+    return draft[key].some(function (x) { return x !== except && x.name.trim().toLowerCase() === low; });
+  }
+
+  // Save: check the names, keep the changes on this device (the window stays open)
+  function saveDraft() {
+    var msg = footMsg();
+    msg.classList.remove("ok");   // problem messages are red, not green
+    // A name typed in an "add" box but not added yet is added now
+    var adds = popupBody.querySelectorAll(".set-add");
+    for (var i = 0; i < adds.length; i++) {
+      if (adds[i]._tryAdd && !adds[i]._tryAdd(true)) { msg.textContent = "Fix the new technique name above, then Save."; return; }
+    }
+    // Every name must have words and be different from the others in its list
+    var problem = null;
+    Object.keys(draft).forEach(function (key) {
+      draft[key].forEach(function (t) {
+        if (problem) return;
+        if (!t.name.trim()) problem = "A technique name is empty. Type a name or delete it, then Save.";
+        else if (nameTaken(key, t.name, t)) problem = "\"" + t.name.trim() + "\" is in the list twice. Change one, then Save.";
+      });
+    });
+    if (problem) {
+      msg.textContent = problem;
+      if (!editMode) { editMode = true; redrawSettings(); footMsg().textContent = problem; }
+      return;
+    }
+    Object.keys(draft).forEach(function (key) {
+      CFG.techniques[key].list = draft[key].map(function (t) {
+        return { name: t.name.trim().slice(0, NAME_MAX), dots: t.dots };
+      });
+    });
+    saveTechniqueValues();
+    // CHANGED: the window stays open after Save. Start fresh from what was just
+    // saved (yellow marks clear, Save turns white, editing turns off) and show "Saved."
+    makeDraft();   // also sets editMode = false
+    redrawSettings();
+    var done = footMsg();
+    done.classList.add("ok");
+    done.textContent = "Saved.";
   }
 
   function openSettings() {
-    openPopup("Technique Effectiveness", settingsNodes(), false, true);   // CHANGED: title (blue, see styles.css)
-    popupBox.classList.add("popup-settings");   // CHANGED: wider, two columns
+    makeDraft();
+    openPopup("Technique Effectiveness", settingsNodes(), false, true);   // title is blue (styles.css)
+    popupBox.classList.add("popup-settings");   // wider, two columns
   }
-  // Redraw the Settings window in place (after Add / Delete / Restore).
-  // focusKey = put the cursor back in that section's name box (after Add).
-  function redrawSettings(focusKey) {
+  // Redraw the window in place (after Add / Delete / Edit).
+  // focusKey = put the cursor back in that section's "new technique" box (after Add).
+  // focusFirstName = put the cursor in the first name box (after Edit).
+  function redrawSettings(focusKey, focusFirstName) {
     var scroll = popupBox.scrollTop;
     popupBody.innerHTML = "";
     settingsNodes().forEach(function (n) { popupBody.appendChild(n); });
+    var boxes = popupBody.querySelectorAll(".set-rename");   // size the name boxes now that they are on screen
+    for (var i = 0; i < boxes.length; i++) fitHeight(boxes[i]);
     popupBox.scrollTop = scroll;
-    if (focusKey) {
-      var box = popupBody.querySelector('.set-add[data-key="' + focusKey + '"] .set-input');
-      if (box) box.focus();
-    } else {
-      popupClose.focus();
-    }
+    var target = null;
+    if (focusKey) target = popupBody.querySelector('.set-add[data-key="' + focusKey + '"] .set-input');
+    else if (focusFirstName) target = popupBody.querySelector(".set-rename");
+    (target || popupClose).focus();
   }
   document.getElementById("settings").addEventListener("click", openSettings);
 

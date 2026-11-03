@@ -61,10 +61,10 @@ window.FSL_CONFIG = {
      the LOWER number is used (the higher one is in the note).
      Only the names are shown in the popup — never the dots.
      To add a technique: copy one line, change the name and dots.
-     CHANGED: these lists are the DEFAULTS. Techniques can also be added,
-     deleted and re-valued with the gear (Settings) next to "3 min"; those
-     changes are saved on that device only. "Restore defaults" in Settings
-     goes back to the lists below.                                    */
+     CHANGED: these lists are the STARTING lists. Techniques can also be
+     added, deleted, renamed (Edit) and re-valued with the gear next to
+     "3 min" (Technique Effectiveness window, then Save). Saved changes
+     stay on that device only and are used instead of the lists below.  */
   techniques: {
     strikes: {
       title: "Effective Strikes",

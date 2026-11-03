@@ -8,7 +8,15 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Interactive Judge Tool</title>
-  <link rel="stylesheet" href="styles.css">
+  <!-- CHANGED: AUTOMATIC FRESH FILES. Every time the page opens, a new number
+       (the current time) is added to each file name, e.g. styles.css?v=1730650000000.
+       The browser sees a "new" file and always downloads the newest copy from
+       GitHub instead of using an old saved one. Nothing to update by hand.
+       The files load in the same order and at the same moment as before. -->
+  <script>
+    window.FRESH_V = Date.now();
+    document.write('<link rel="stylesheet" href="styles.css?v=' + window.FRESH_V + '">');
+  </script>
 </head>
 <body>
   <!-- "viewport" keeps the space for the scaled page; "page" is the chart -->
@@ -68,8 +76,11 @@
     </div>
   </div>
 
-  <script src="config.js"></script>
-  <script src="definitions.js"></script>
-  <script src="app.js"></script>
+  <!-- CHANGED: the three program files, each with the automatic fresh number (see top of file) -->
+  <script>
+    ["config.js", "definitions.js", "app.js"].forEach(function (f) {
+      document.write('<script src="' + f + '?v=' + window.FRESH_V + '"><\/script>');
+    });
+  </script>
 </body>
 </html>

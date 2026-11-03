@@ -347,6 +347,20 @@ body {
 .popup-settings .set-addbtn { min-width: 52px; }
 /* Very narrow screens (phones): one column again, so names stay readable */
 @media (max-width: 640px) { .set-cols { grid-template-columns: 1fr; } }
+/* CHANGED: Edit + Save buttons (Restore defaults removed) */
+.set-footbtns { display: inline-flex; gap: 10px; flex: none; }
+.set-edit, .set-save {
+  font-family: var(--sans); font-size: 14px; font-weight: 700; padding: 7px 18px;
+  border: 1.5px solid var(--ink); background: #fff; cursor: pointer;
+}
+.set-edit:hover, .set-save:hover { background: var(--link-hover); }
+.set-edit.on, .set-edit.on:hover { background: var(--ink); color: #fff; cursor: default; }   /* Edit mode is on (Save turns it off) */
+.set-save.dirty { background: var(--tag); }                           /* yellow = changes not saved yet */
+.set-name.changed { background: var(--tag); }
+.set-input.changed { background: #fff9c4; }
+.set-rename { resize: none; overflow: hidden; line-height: 1.25; display: block; }   /* name box in Edit mode wraps */
+.popup p.set-footmsg { text-align: right; margin-top: 6px; }
+.popup p.set-footmsg.ok { color: #1a7f2e; font-weight: 700; }   /* CHANGED: green "Saved." */
 /* CHANGED: add / delete techniques */
 .set-stepper { display: inline-flex; align-items: center; gap: 6px; flex: none; }
 .set-new { font-style: italic; color: var(--muted); font-size: 14px; }
