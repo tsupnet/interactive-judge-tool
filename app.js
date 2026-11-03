@@ -4,8 +4,16 @@
    - Dragging + snapping to every dot (mouse, finger, or arrow keys)
    - Moves the main needle using the ratios in config.js
    - Locks Effective Aggressiveness / Cage Control per the 2019 criteria
+   - CHANGED: Duration moves the needle using Dominance windows (config.js),
+     one corner at a time (the other corner's sliders lock), and a
+     5 min / 3 min round choice
    - Shows "Consider 10-8" / "Always Score 10-8" for each corner
    - Opens the popups for hyperlinked words
+   - NEW: red "Effective Strikes" / "Effective Grappling" open the techniques
+     popups (list in config.js → techniques); a technique adds dots to the
+     chosen fighter's Damage / Impact slider
+   - CHANGED: gear button above the credit opens Settings, where every
+     technique value can be changed (saved in this browser only)
    - Shrinks/grows the one-page chart to fit the screen
    You should not need to edit this file to change ratios, dots or text.
    ===================================================================== */
@@ -50,7 +58,7 @@
   CFG.sliders.forEach(function (s) { s._dots = sliderDotList(s); });
 
   // Everything the tool remembers
-  var state = { manual: 0, needle: 0, values: {} };
+  var state = { manual: 0, needle: 0, values: {}, roundMin: CFG.roundLength.defaultMinutes };  // CHANGED: roundMin
   CFG.sliders.forEach(function (s) { state.values[s.id] = { red: 0, blue: 0 }; });
 
   var ui = { halves: {}, rows: {} };
@@ -185,14 +193,16 @@
   }
 
   // Dot + tick mark for one position on a track
-  function addDot(track, cell, cells, kind, tick) {
+  function addDot(track, cell, cells, kind, tick, step) {   // CHANGED: step = slider dot number (side sliders only)
     // kind is one or more words, e.g. "small red" → classes dot-small dot-red
     var dot = el("div", "dot " + kind.split(" ").map(function (w) { return "dot-" + w; }).join(" "));
     dot.style.left = cellLeft(cell, cells);
+    if (step != null) dot.dataset.step = step;
     track.appendChild(dot);
     if (tick) {
       var t = el("div", "tick tick-" + tick);
       t.style.left = cellLeft(cell, cells);
+      if (step != null) t.dataset.step = step;
       track.appendChild(t);
     }
   }
@@ -278,9 +288,11 @@
     cap.appendChild(txt("Judges determine their scores, by assessing and evaluating the "));
     cap.appendChild(el("i", "u", "Impact"));
     cap.appendChild(txt(" of "));
-    cap.appendChild(term("strikes", "Effective Strikes", "strong"));
+    // NEW: the red words open the techniques popups (not the definition text).
+    // The italic words in the (10-8) Guidelines line still open the definitions.
+    cap.appendChild(techniqueTerm("strikes", "Effective Strikes"));
     cap.appendChild(txt(" and "));
-    cap.appendChild(term("grappling", "Effective Grappling", "strong"));
+    cap.appendChild(techniqueTerm("grappling", "Effective Grappling"));
     cap.appendChild(txt("  -  Focus on the result of the action, and not the action itself"));
     sec.appendChild(cap);
 
@@ -362,6 +374,7 @@
         if (s.labelStyle === "tick") {
           lab.classList.add("at-tick");
           lab.style.left = cellLeft(toCell(start + seg.dots), cells);
+          lab.dataset.step = start + seg.dots;   // CHANGED: hidden when past the end of a 3-minute round
         } else {
           // CHANGED: centered between the two vertical lines of its section
           placeBetween(lab, toCell(start), toCell(start + seg.dots), cells);
@@ -374,9 +387,12 @@
     // Dots and tick marks
     for (var c = 0; c < cells; c++) {
       var k = toStep(c);
-      if (k === 0) { addDot(track, c, cells, "big " + side, "zone"); continue; }
+      if (k === 0) { addDot(track, c, cells, "big " + side, "zone", 0); continue; }
       var d = dots[k - 1];
-      addDot(track, c, cells, (d.segEnd ? "big " : "small ") + side, d.segEnd ? "zone" : null);
+      // CHANGED: when a slider has landableDots (Dominance), the usable dot is drawn
+      // as a "mid" dot and the unused dots are drawn as dashes, like the chart
+      var kind = d.segEnd ? "big" : !s.landableDots ? "small" : s.landableDots.indexOf(k) !== -1 ? "mid" : "dash";
+      addDot(track, c, cells, kind + " " + side, d.segEnd ? "zone" : null, k);
     }
 
     var handle = el("div", "handle arrow");
@@ -392,6 +408,13 @@
       var step = toStep(c);
       if (state.values[s.id][side] === step) return;
       state.values[s.id][side] = step;
+      // CHANGED: one corner at a time. Using a slider for one corner (moving it
+      // above zero) snaps every listed slider of the OTHER corner back to zero.
+      // The other corner is NOT grayed out: you can click it at any time.
+      if (step > 0 && (CFG.cornerLock || []).indexOf(s.id) !== -1) {
+        var other = side === "red" ? "blue" : "red";
+        CFG.cornerLock.forEach(function (id) { state.values[id][other] = 0; });
+      }
       update();
     }
     function landable(c) { return sliderLandable(s, toStep(c)); }
@@ -414,6 +437,7 @@
       return Math.floor(sec / 60) + ":" + twoDigits(sec % 60);
     }
     var d = s._dots[k - 1];
+    if (s.landableDots) return d.seg.label;   // CHANGED: Dominance reads "Low Impact" etc.
     if (!d.seg.label) return k + " of " + s._dots.length;
     return d.seg.label + " · " + d.dotInSeg + " of " + d.seg.dots;
   }
@@ -431,6 +455,15 @@
     CFG.sliders.forEach(function (s) {
       if (s.group !== group) return;
       var v = state.values[s.id];
+      // CHANGED: Duration (time slider) moves the needle by the Dominance window of its own corner
+      if (s.valueFormat === "time") {
+        SIDES.forEach(function (side) {
+          if (!v[side]) return;
+          var n = durationNeedle(v[side] * (s.secondsPerDot || 6), dominanceLevel(s, side));
+          sum += side === "blue" ? n : -n;
+        });
+        return;
+      }
       var net = v.blue - v.red;
       if (s.needleMap) {
         var steps = lookupNeedle(s.needleMap, Math.abs(net));
@@ -440,6 +473,29 @@
       }
     });
     return sum;
+  }
+
+  // CHANGED: which Dominance level (Low / Med / High) a corner is in. null = no Dominance.
+  function dominanceLevel(durSlider, side) {
+    var domId = durSlider.requires || "dominance";
+    var k = (state.values[domId] || {})[side] || 0;
+    if (!k) return null;
+    var dom = CFG.sliders.filter(function (x) { return x.id === domId; })[0];
+    return dom._dots[k - 1].seg.short;
+  }
+
+  // CHANGED: main needle dot (can be a fraction; rounded later) for a Duration time in seconds.
+  // See durationRules in config.js for the meaning of the numbers.
+  function durationNeedle(sec, levelName) {
+    var R = CFG.durationRules;
+    var L = levelName && R.levels[levelName];
+    if (!L) return 0;
+    var scale = state.roundMin * 60 / CFG.roundLength.fullRoundSeconds;   // 3-minute round = 0.6
+    var s = L.startSec * scale, e = L.endSec * scale;
+    var perSec = (R.endDot - R.startDot) / (e - s);                       // needle dots per second inside the window
+    if (sec < s) return 0;   // CHANGED: before the window starts, the needle stays at Draw
+    if (sec <= e) return R.startDot + (sec - s) * perSec;
+    return R.endDot + (sec - e) * perSec * R.afterRate;
   }
 
   // Needle dot for a slider dot. A dot missing from the table
@@ -457,8 +513,16 @@
     var info = MAIN_DOTS[Math.abs(p) - 1];
     return !(info.zoneEnd || info.partEnd);
   }
+  // CHANGED: last dot a slider may use. Duration stops at the end of the chosen round (5 or 3 min).
+  function sliderMax(s) {
+    if (s.valueFormat === "time") return Math.round(state.roundMin * 60 / (s.secondsPerDot || 6));
+    return s._dots.length;
+  }
   function sliderLandable(s, k) {
-    if (k === 0 || !CFG.skipLineDots) return true;
+    if (k === 0) return true;
+    if (k > sliderMax(s)) return false;
+    if (s.landableDots) return s.landableDots.indexOf(k) !== -1;   // CHANGED: Dominance = one dot per level
+    if (!CFG.skipLineDots) return true;
     return !s._dots[k - 1].segEnd;
   }
   // If the needle math lands on a line dot, step one dot toward Draw
@@ -479,18 +543,8 @@
   }
 
   function update() {
-    // 1. Effective Strikes / Grappling = the judge's needle + Impact, Dominance, Duration
-    var strikingGrappling = state.manual + contribution("tenEight");
-
-    // 2. Effective Aggressiveness only counts when Strikes / Grappling are even
-    var aggrOpen = roundEven(strikingGrappling) === 0;
-    if (!aggrOpen) resetGroup("aggressiveness");
-
-    // 3. Cage Control only counts when Strikes / Grappling AND Aggressiveness are even
-    var cageOpen = aggrOpen && groupEven("aggressiveness");
-    if (!cageOpen) resetGroup("cage");
-
-    // CHANGED: a slider with "requires" (config.js) is locked for a corner
+    // CHANGED: this block moved to the top (it used to run after the needle was
+    // computed). A slider with "requires" (config.js) is locked for a corner
     // until that corner's required slider is above zero. Example: Red
     // Duration is locked until Red Dominance has at least one dot.
     var halfLocked = {};
@@ -503,6 +557,17 @@
         }
       });
     });
+
+    // 1. Effective Strikes / Grappling = the judge's needle + Impact, Dominance, Duration
+    var strikingGrappling = state.manual + contribution("tenEight");
+
+    // 2. Effective Aggressiveness only counts when Strikes / Grappling are even
+    var aggrOpen = roundEven(strikingGrappling) === 0;
+    if (!aggrOpen) resetGroup("aggressiveness");
+
+    // 3. Cage Control only counts when Strikes / Grappling AND Aggressiveness are even
+    var cageOpen = aggrOpen && groupEven("aggressiveness");
+    if (!cageOpen) resetGroup("cage");
 
     // 4. Final needle position, snapped to a dot
     var total = strikingGrappling + contribution("aggressiveness") + contribution("cage");
@@ -633,10 +698,12 @@
 
   var popupBox = overlay.querySelector(".popup");
 
-  function openPopup(title, nodes, chartMode) {
+  function openPopup(title, nodes, chartMode, techMode) {
     lastFocus = document.activeElement;
     // CHANGED: chart mode = no title, chart fills the screen
     popupBox.classList.toggle("popup-chart", !!chartMode);
+    // NEW: techniques mode = centered title, narrower box
+    popupBox.classList.toggle("popup-techniques", !!techMode);
     popupTitle.textContent = title;
     popupBody.innerHTML = "";
     nodes.forEach(function (n) { popupBody.appendChild(n); });
@@ -660,6 +727,189 @@
       return;
     }
     openPopup(d.title, d.body.map(function (t) { return el("p", null, t); }));
+  }
+
+  // ------------------------------------------------------------------
+  // NEW: Techniques popups (Effective Strikes / Effective Grappling)
+  // List from config.js → techniques. Order in the popup:
+  // title, technique names, then the Red and Blue boxes.
+  // CHANGED: the user picks a technique FIRST (it highlights yellow).
+  // The Red and Blue boxes stay grayed out until a technique is picked.
+  // Clicking Red or Blue adds the technique's dots to that fighter's slider and closes the popup.
+  // ------------------------------------------------------------------
+  function techniqueTerm(key, text) {
+    var b = el("button", "term term-strong", text);
+    b.type = "button";
+    b.addEventListener("click", function () { openTechniques(key); });
+    return b;
+  }
+
+  function openTechniques(key) {
+    var T = CFG.techniques && CFG.techniques[key];
+    if (!T) {
+      openPopup("Missing list", [el("p", null, "No techniques found for \"" + key + "\" in config.js.")]);
+      return;
+    }
+    var chosen = null;   // CHANGED: the picked technique — must be picked every time the popup opens
+    var techButtons = [];
+    var cornerButtons = {};
+
+    var list = el("div", "tech-list");
+    sortedTechniques(T).forEach(function (t) {   // CHANGED: highest value at the top, even after values are changed in Settings
+      var b = el("button", "tech-btn", t.name);
+      b.type = "button";
+      b.setAttribute("aria-pressed", "false");
+      b.addEventListener("click", function () {
+        chosen = t;
+        techButtons.forEach(function (x) {
+          x.classList.toggle("on", x === b);
+          x.setAttribute("aria-pressed", x === b ? "true" : "false");
+        });
+        SIDES.forEach(function (s2) { cornerButtons[s2].disabled = false; });
+        hint.textContent = "Now click Red or Blue.";
+      });
+      list.appendChild(b);
+      techButtons.push(b);
+    });
+    if (!techButtons.length) list.appendChild(el("p", "tech-empty", "Techniques will be added later."));
+
+    var corners = el("div", "tech-corners");
+    SIDES.forEach(function (side) {
+      var c = el("button", "tech-corner tech-" + side, side === "red" ? "Red" : "Blue");
+      c.type = "button";
+      c.disabled = true;   // grayed out until a technique is picked
+      c.addEventListener("click", function () {
+        if (!chosen) return;
+        addToSlider(T.slider || "impact", side, Number(chosen.dots) || 0);
+        closePopup();
+      });
+      cornerButtons[side] = c;
+      corners.appendChild(c);
+    });
+
+    var hint = el("p", "tech-hint",
+      techButtons.length ? "Pick a technique, then click Red or Blue." : "");
+
+    openPopup(T.title, [list, corners, hint], false, true);
+  }
+
+  // CHANGED: techniques from highest value to lowest. Equal values keep the config.js order.
+  function sortedTechniques(T) {
+    return (T.list || [])
+      .map(function (t, i) { return { t: t, i: i }; })
+      .sort(function (a, b) { return (Number(b.t.dots) - Number(a.t.dots)) || (a.i - b.i); })
+      .map(function (x) { return x.t; });
+  }
+
+  // ------------------------------------------------------------------
+  // CHANGED: Settings (gear above the credit) — change technique values.
+  // The numbers in config.js are the defaults. Changes are saved in this
+  // browser on this device only (another computer or iPad keeps its own).
+  // "Restore defaults" goes back to the config.js numbers.
+  // ------------------------------------------------------------------
+  var SETTINGS_KEY = "ijt-technique-values-v1";
+
+  // Remember each technique's config.js value, then apply any saved values
+  function loadTechniqueValues() {
+    var saved = {};
+    try { saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}") || {}; } catch (err) { saved = {}; }
+    Object.keys(CFG.techniques || {}).forEach(function (key) {
+      (CFG.techniques[key].list || []).forEach(function (t) {
+        t._default = Number(t.dots) || 0;
+        var v = saved[key] && saved[key][t.name];   // saved by name, so reordering config.js is safe
+        if (typeof v === "number" && v >= 1 && v <= techniqueMax(CFG.techniques[key])) t.dots = v;
+      });
+    });
+  }
+  function saveTechniqueValues() {
+    var out = {};
+    Object.keys(CFG.techniques || {}).forEach(function (key) {
+      (CFG.techniques[key].list || []).forEach(function (t) {
+        if (t.dots !== t._default) { out[key] = out[key] || {}; out[key][t.name] = t.dots; }
+      });
+    });
+    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(out)); } catch (err) { /* private mode: works until the page is closed */ }
+  }
+  // Highest value allowed = number of usable dots on the slider the technique moves (27 on Damage / Impact)
+  function techniqueMax(T) {
+    var s = CFG.sliders.filter(function (x) { return x.id === (T.slider || "impact"); })[0];
+    if (!s) return 1;
+    var n = 0;
+    for (var k = 1; k <= sliderMax(s); k++) if (sliderLandable(s, k)) n++;
+    return n;
+  }
+
+  function openSettings() {
+    var nodes = [];
+    Object.keys(CFG.techniques || {}).forEach(function (key) {
+      var T = CFG.techniques[key];
+      var max = techniqueMax(T);
+      nodes.push(el("div", "set-head", T.title));
+      if (!(T.list || []).length) {
+        nodes.push(el("p", "tech-empty", "No techniques yet."));
+        return;
+      }
+      // Listed in the same order as the popup (highest at the top when the Settings window opens)
+      sortedTechniques(T).forEach(function (t) {
+        var row = el("div", "set-row");
+        row.appendChild(el("span", "set-name", t.name));
+        var minus = el("button", "set-step", "−");
+        var val = el("span", "set-val");
+        var plus = el("button", "set-step", "+");
+        minus.type = plus.type = "button";
+        minus.setAttribute("aria-label", "Lower value: " + t.name);
+        plus.setAttribute("aria-label", "Raise value: " + t.name);
+        function show() {
+          val.textContent = t.dots;
+          val.classList.toggle("changed", t.dots !== t._default);
+          minus.disabled = t.dots <= 1;
+          plus.disabled = t.dots >= max;
+        }
+        minus.addEventListener("click", function () { if (t.dots > 1) { t.dots--; saveTechniqueValues(); show(); } });
+        plus.addEventListener("click", function () { if (t.dots < max) { t.dots++; saveTechniqueValues(); show(); } });
+        show();
+        row.appendChild(minus);
+        row.appendChild(val);
+        row.appendChild(plus);
+        nodes.push(row);
+      });
+    });
+
+    var foot = el("div", "set-foot");
+    foot.appendChild(el("span", "set-note",
+      "Value = dots added to Damage / Impact. Yellow = changed. Saved on this device only."));
+    var restore = el("button", "set-restore", "Restore defaults");
+    restore.type = "button";
+    restore.addEventListener("click", function () {
+      Object.keys(CFG.techniques || {}).forEach(function (key) {
+        (CFG.techniques[key].list || []).forEach(function (t) { t.dots = t._default; });
+      });
+      saveTechniqueValues();
+      openSettings();   // redraw with the default numbers
+    });
+    foot.appendChild(restore);
+    nodes.push(foot);
+
+    openPopup("Settings — Technique Values", nodes, false, true);
+  }
+  document.getElementById("settings").addEventListener("click", openSettings);
+
+  // Adds dots to one corner's slider. Moves outward one usable dot at a time,
+  // skipping line dots (same as the arrow keys). Stops at the last usable dot.
+  // Does NOT use the "one corner at a time" rule: the other corner keeps its values.
+  function addToSlider(id, side, dots) {
+    var s = CFG.sliders.filter(function (x) { return x.id === id; })[0];
+    if (!s || !dots) return;
+    var k = state.values[id][side];
+    var max = sliderMax(s);
+    for (var i = 0; i < dots; i++) {
+      var n = k + 1;
+      while (n <= max && !sliderLandable(s, n)) n++;
+      if (n > max) break;
+      k = n;
+    }
+    state.values[id][side] = k;
+    update();
   }
 
   function openChart(levelName) {
@@ -735,9 +985,44 @@
     update();
   });
 
+  // CHANGED: 5 min / 3 min choice. Choosing the OTHER length clears Duration
+  // (so no old value sits past the new end) and hides the Duration dots past 3:00.
+  function applyRoundLength() {
+    Object.keys(ui.halves).forEach(function (key) {
+      var h = ui.halves[key];
+      if (h.s.valueFormat !== "time") return;
+      var max = sliderMax(h.s);
+      var nodes = h.track.querySelectorAll("[data-step]");
+      for (var i = 0; i < nodes.length; i++) {
+        nodes[i].classList.toggle("beyond", Number(nodes[i].dataset.step) > max);
+      }
+    });
+    var btns = document.querySelectorAll("#roundlen .rl-btn");
+    for (var j = 0; j < btns.length; j++) {
+      var on = Number(btns[j].getAttribute("data-min")) === state.roundMin;
+      btns[j].classList.toggle("on", on);
+      btns[j].setAttribute("aria-pressed", on ? "true" : "false");
+    }
+  }
+  var roundBtns = document.querySelectorAll("#roundlen .rl-btn");
+  for (var rb = 0; rb < roundBtns.length; rb++) {
+    roundBtns[rb].addEventListener("click", function () {
+      var m = Number(this.getAttribute("data-min"));
+      if (m === state.roundMin) return;
+      state.roundMin = m;
+      CFG.sliders.forEach(function (s) {
+        if (s.valueFormat === "time") state.values[s.id] = { red: 0, blue: 0 };
+      });
+      applyRoundLength();
+      update();
+    });
+  }
+
+  loadTechniqueValues();   // CHANGED: apply values saved in Settings
   buildMain();
   buildGuidelineText();
   buildSliders();
+  applyRoundLength();
   update();
   fitToScreen();
   // Fonts can load a moment later and change the page height

@@ -30,6 +30,82 @@ window.FSL_CONFIG = {
      The center dot is never skipped.                                   */
   skipLineDots: true,
 
+  /* ---------------- ROUND LENGTH (CHANGED) ------------------------------
+     The "5 min / 3 min" choice next to Reset. defaultMinutes = which one
+     is selected when the page opens. In 3-minute mode the Duration slider
+     only goes to 3:00 and every time window below is scaled by 3 / 5.   */
+  roundLength: {
+    defaultMinutes: 5,
+    fullRoundSeconds: 300      // the times in durationRules below are for a 5-minute round
+  },
+
+  /* ---------------- ONE CORNER AT A TIME (CHANGED) ----------------------
+     Nothing is grayed out. If you click or drag ANY slider listed here
+     for one corner (above zero), ALL the listed sliders of the other
+     corner snap back to zero, and the slider you used becomes active.
+     Remove "aggressiveness" and "cage" from the list if you do not want
+     this on those two sliders.                                         */
+  cornerLock: ["impact", "dominance", "duration", "aggressiveness", "cage"],
+
+  /* ---------------- TECHNIQUES POPUPS (NEW) -----------------------------
+     Clicking the red "Effective Strikes" or "Effective Grappling" words
+     opens a list of techniques. CHANGED: the user picks a technique
+     first, then Red or Blue. Clicking the color ADDS the technique's
+     dots to that fighter's slider and closes the popup
+     (slider: "impact" = Damage / Impact). Line dots are skipped, the
+     same way the arrow keys skip them.
+     A technique does NOT snap the other corner to zero, so the needle
+     moves toward the chosen fighter from where it is.
+     dots = the number used. Tom's chart gives two numbers per technique;
+     the LOWER number is used (the higher one is in the note).
+     Only the names are shown in the popup — never the dots.
+     To add a technique: copy one line, change the name and dots.     */
+  techniques: {
+    strikes: {
+      title: "Effective Strikes",
+      slider: "impact",
+      list: [
+        // CHANGED: highest value at the top. The popup shows them in this order.
+        { name: "Effective knockdown, fighter is hurt and covers up",                dots: 8 },  // 8 or 9
+        { name: "Flash knockdown, fighter gets back up immediately",                 dots: 6 },  // 6 or 7
+        { name: "Effective liver kick, fighter struggles to continue",               dots: 5 },  // 5 or 6
+        { name: "Head strike buckles opponent’s knees",                              dots: 5 },  // 5 or 6
+        { name: "Effective elbow, strike to the head",                               dots: 4 },  // 4 or 5
+        { name: "Hard knee to the body, fighter struggles",                          dots: 4 },  // 4 or 5
+        { name: "Head strike knocks opponent’s head back and fighter moves backwards", dots: 3 },  // 3 or 4
+        { name: "Solid head strike",                                                 dots: 2 },  // 2 or 3
+        { name: "Light head strike",                                                 dots: 1 }   // 1 or 2
+      ]
+    },
+    grappling: {
+      title: "Effective Grappling",
+      slider: "impact",
+      list: []   // empty until Tom picks the grappling techniques
+    }
+  },
+
+  /* ---------------- DURATION RULES (CHANGED) ----------------------------
+     The Dominance level of a corner (Low / Med / High) picks a time
+     window. Times are seconds in a 5-minute round.
+       - Before the window starts: the needle stays at Draw (CHANGED).
+       - Inside the window: the needle starts at startDot (dot 1 = 10-9
+         Close) where the window starts, and moves evenly to endDot
+         (dot 11 = 10-8 Close) where the window ends.
+       - After the window ends: the needle keeps moving, at afterRate of
+         the speed it had inside the window (1/3 = one third as fast).
+     Rounding and skipping of line dots is done the same way as for the
+     other sliders. Change any number here to tune the behavior.          */
+  durationRules: {
+    startDot: 1,
+    endDot: 11,
+    afterRate: 1 / 3,
+    levels: {
+      High: { startSec: 0,   endSec: 90  },    // High Dominance: least time needed
+      Med:  { startSec: 90,  endSec: 210 },
+      Low:  { startSec: 210, endSec: 300 }     // Low Dominance: most time needed
+    }
+  },
+
   /* ---------------- PAGE LAYOUT ---------------------------------------
      sideDotSpacing = space between dots on the 10 side sliders, in
      pixels (before the page is scaled to fit the screen). Same spacing
@@ -141,6 +217,10 @@ window.FSL_CONFIG = {
         { label: "High Impact",   short: "High", dots: 10 }
       ],
       chartLinks: true,   // Low / Medium / High Impact open the Duration vs. Dominance chart
+      // CHANGED: Dominance is now ONE dot per level, like the new chart.
+      // Only these dots can be used (the middle dot of each section):
+      // dot 5 = Low, dot 15 = Medium, dot 25 = High. The other dots are drawn as dashes.
+      landableDots: [5, 15, 25],
       ratio: 0
     },
     {

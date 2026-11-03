@@ -150,6 +150,9 @@ body {
 .dot-blue { background: var(--blue); }
 .half-track .dot-small { width: 4px; height: 4px; }
 .half-track .dot-big { width: 11px; height: 11px; border: 1px solid #222; }
+/* CHANGED: Dominance = one dot per level; the unused dots are short black dashes */
+.half-track .dot-mid { width: 7px; height: 7px; }
+.half-track .dot-dash { width: 6px; height: 1.5px; border-radius: 0; background: #000; }
 
 /* Tick marks: tall = section line, short = Close / Clearly / Cusp line */
 .tick { position: absolute; background: var(--ink); pointer-events: none; }
@@ -228,7 +231,27 @@ body {
   font-family: var(--sans); font-size: 12px;
   padding: 2px 10px; border: 1.5px solid var(--ink); background: #fff; cursor: pointer;
 }
+/* CHANGED: Reset + the 5 min / 3 min choice */
+.foot-left { justify-self: start; display: flex; align-items: center; gap: 10px; }
+.roundlen { display: inline-flex; }
+.rl-btn {
+  font-family: var(--sans); font-size: 12px;
+  padding: 2px 10px; border: 1.5px solid var(--ink); background: #fff; cursor: pointer;
+}
+.rl-btn + .rl-btn { border-left: 0; }
+.rl-btn.on { background: var(--tag); font-weight: 700; }
+/* CHANGED: Duration dots past the end of a 3-minute round are hidden */
+.beyond { display: none !important; }
 .credit { justify-self: end; font-family: var(--papyrus); font-size: 11px; }
+/* CHANGED: gear button to the right of "3 min". The 10px gap in .foot-left
+   is the same space as between Reset and "5 min". Same height as those buttons. */
+.settings-btn {
+  width: 20px; height: 20px; padding: 2px; border: 1.5px solid var(--ink); border-radius: 50%;
+  background: #fff; cursor: pointer; flex: none;
+}
+.settings-btn svg { display: block; width: 100%; height: 100%; }
+.settings-btn path { fill: var(--ink); }
+.settings-btn:hover, .settings-btn:focus-visible { background: var(--link-hover); outline: none; }
 
 /* ---------- Popup ---------- */
 .popup-overlay {
@@ -271,4 +294,47 @@ body {
   position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); margin: 0;
 }
 .popup.popup-chart .chart-frame { margin: 0; border: 0; }
+/* ---------- NEW: Techniques popups (Effective Strikes / Grappling) ---------- */
+.popup.popup-techniques { max-width: 600px; }
+.popup.popup-techniques h2 { text-align: center; margin: 0 44px 14px; }
+.tech-list { display: flex; flex-direction: column; gap: 6px; }
+.tech-btn {
+  font-family: var(--serif); font-size: 17px; text-align: left; color: var(--ink);
+  padding: 8px 12px; border: 1.5px solid var(--ink); background: #fff; cursor: pointer;
+}
+.tech-btn:hover:not(:disabled), .tech-btn:focus-visible { background: var(--link-hover); outline: none; }
+.tech-btn.on { background: var(--tag); font-weight: 700; border-width: 2.5px; }   /* CHANGED: picked technique = yellow */
+.tech-empty { text-align: center; color: var(--muted); font-style: italic; }
+.tech-corners { display: flex; justify-content: center; gap: 22px; margin-top: 16px; }
+.tech-corner {
+  width: 120px; height: 56px; border: 3px solid var(--ink);
+  font-family: var(--sans); font-weight: 700; font-size: 19px; color: #fff; cursor: pointer;
+}
+.tech-red { background: var(--red); }
+.tech-blue { background: var(--blue); }
+.tech-corner:hover:not(:disabled) { box-shadow: 0 0 0 5px var(--tag), 0 0 0 7px var(--ink); }
+.tech-corner:disabled { opacity: .3; cursor: not-allowed; }   /* CHANGED: grayed out until a technique is picked */
+.popup p.tech-hint { text-align: center; font-size: 14px; color: var(--muted); margin: 12px 0 2px; }
+/* ---------- CHANGED: Settings popup (technique values) ---------- */
+.set-head { font-size: 18px; font-weight: 700; text-decoration: underline; margin: 10px 0 6px; }
+.set-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 5px 0; border-bottom: 1px solid #ddd; font-size: 16px;
+}
+.set-name { flex: 1; }
+.set-step {
+  width: 34px; height: 34px; border: 1.5px solid var(--ink); background: #fff;
+  font-family: var(--sans); font-size: 20px; font-weight: 700; line-height: 1; cursor: pointer;
+}
+.set-step:disabled { opacity: .3; cursor: not-allowed; }
+.set-step:hover:not(:disabled) { background: var(--link-hover); }
+.set-val { width: 34px; text-align: center; font-family: var(--sans); font-weight: 700; font-size: 18px; }
+.set-val.changed { background: var(--tag); }   /* yellow = different from the value in config.js */
+.set-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; gap: 12px; }
+.set-note { font-size: 13px; color: var(--muted); }
+.set-restore {
+  font-family: var(--sans); font-size: 13px; padding: 6px 12px;
+  border: 1.5px solid var(--ink); background: #fff; cursor: pointer; white-space: nowrap;
+}
+.set-restore:hover { background: var(--link-hover); }
 .missing-image { border: 2px dashed #999; padding: 14px; text-align: center; color: var(--muted); margin: 8px 0; }
