@@ -54,12 +54,17 @@ window.FSL_CONFIG = {
      dots to that fighter's slider and closes the popup
      (slider: "impact" = Damage / Impact). Line dots are skipped, the
      same way the arrow keys skip them.
-     A technique does NOT snap the other corner to zero, so the needle
-     moves toward the chosen fighter from where it is.
+     CHANGED: a technique first takes dots away from the OTHER corner's
+     slider; only the dots left over are added to the chosen corner.
+     (Red at 8 + Blue technique worth 8 = both at 0, needle at Draw.)
      dots = the number used. Tom's chart gives two numbers per technique;
      the LOWER number is used (the higher one is in the note).
      Only the names are shown in the popup — never the dots.
-     To add a technique: copy one line, change the name and dots.     */
+     To add a technique: copy one line, change the name and dots.
+     CHANGED: these lists are the DEFAULTS. Techniques can also be added,
+     deleted and re-valued with the gear (Settings) next to "3 min"; those
+     changes are saved on that device only. "Restore defaults" in Settings
+     goes back to the lists below.                                    */
   techniques: {
     strikes: {
       title: "Effective Strikes",

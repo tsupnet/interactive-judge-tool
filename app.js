@@ -12,8 +12,8 @@
    - NEW: red "Effective Strikes" / "Effective Grappling" open the techniques
      popups (list in config.js → techniques); a technique adds dots to the
      chosen fighter's Damage / Impact slider
-   - CHANGED: gear button above the credit opens Settings, where every
-     technique value can be changed (saved in this browser only)
+   - CHANGED: gear button beside "3 min" opens Settings, where techniques
+     can be added, deleted, and their values changed (saved in this browser only)
    - Shrinks/grows the one-page chart to fit the screen
    You should not need to edit this file to change ratios, dots or text.
    ===================================================================== */
@@ -704,6 +704,7 @@
     popupBox.classList.toggle("popup-chart", !!chartMode);
     // NEW: techniques mode = centered title, narrower box
     popupBox.classList.toggle("popup-techniques", !!techMode);
+    popupBox.classList.remove("popup-settings");   // CHANGED: only the Settings window is extra wide (added back by openSettings)
     popupTitle.textContent = title;
     popupBody.innerHTML = "";
     nodes.forEach(function (n) { popupBody.appendChild(n); });
@@ -802,34 +803,68 @@
   }
 
   // ------------------------------------------------------------------
-  // CHANGED: Settings (gear above the credit) — change technique values.
-  // The numbers in config.js are the defaults. Changes are saved in this
+  // CHANGED: Settings (gear beside "3 min") — change values, ADD and DELETE techniques.
+  // The lists in config.js are the defaults. Changes are saved in this
   // browser on this device only (another computer or iPad keeps its own).
-  // "Restore defaults" goes back to the config.js numbers.
+  // "Restore defaults" goes back to the config.js lists (added techniques
+  // are removed and deleted ones come back).
   // ------------------------------------------------------------------
-  var SETTINGS_KEY = "ijt-technique-values-v1";
+  var SETTINGS_KEY = "ijt-techniques-v2";          // CHANGED: now saves whole lists
+  var OLD_SETTINGS_KEY = "ijt-technique-values-v1"; // earlier version saved values only
+  var NAME_MAX = 100;                               // longest technique name allowed
+  var defaultLists = {};                            // copy of the config.js lists
 
-  // Remember each technique's config.js value, then apply any saved values
-  function loadTechniqueValues() {
-    var saved = {};
-    try { saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}") || {}; } catch (err) { saved = {}; }
-    Object.keys(CFG.techniques || {}).forEach(function (key) {
-      (CFG.techniques[key].list || []).forEach(function (t) {
-        t._default = Number(t.dots) || 0;
-        var v = saved[key] && saved[key][t.name];   // saved by name, so reordering config.js is safe
-        if (typeof v === "number" && v >= 1 && v <= techniqueMax(CFG.techniques[key])) t.dots = v;
-      });
-    });
+  function copyList(list) {
+    return (list || []).map(function (t) { return { name: String(t.name), dots: Number(t.dots) || 1 }; });
   }
+  function defaultFor(key, name) {
+    var d = (defaultLists[key] || []).filter(function (x) { return x.name === name; })[0];
+    return d ? d.dots : null;   // null = not in config.js (added in Settings)
+  }
+
+  // Remember the config.js lists, then use any lists saved in Settings
+  function loadTechniqueValues() {
+    var saved = null, old = null;
+    try { saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "null"); } catch (err) { saved = null; }
+    if (!saved) {
+      try { old = JSON.parse(localStorage.getItem(OLD_SETTINGS_KEY) || "null"); } catch (err) { old = null; }
+    }
+    Object.keys(CFG.techniques || {}).forEach(function (key) {
+      var T = CFG.techniques[key];
+      var max = techniqueMax(T);
+      defaultLists[key] = copyList(T.list);
+      T.list = copyList(T.list);
+      if (saved && Array.isArray(saved[key])) {
+        // Use the saved list, skipping anything broken
+        T.list = saved[key].filter(function (t) {
+          return t && typeof t.name === "string" && t.name.trim() &&
+            typeof t.dots === "number" && t.dots >= 1 && t.dots <= max;
+        }).map(function (t) { return { name: t.name.trim().slice(0, NAME_MAX), dots: Math.round(t.dots) }; });
+      } else if (old && old[key]) {
+        // Values saved by the earlier version of Settings
+        T.list.forEach(function (t) {
+          var v = old[key][t.name];
+          if (typeof v === "number" && v >= 1 && v <= max) t.dots = v;
+        });
+      }
+    });
+    if (old) saveTechniqueValues();   // move the old values to the new format
+  }
+
+  // Saves only the lists that are different from config.js
   function saveTechniqueValues() {
     var out = {};
     Object.keys(CFG.techniques || {}).forEach(function (key) {
-      (CFG.techniques[key].list || []).forEach(function (t) {
-        if (t.dots !== t._default) { out[key] = out[key] || {}; out[key][t.name] = t.dots; }
-      });
+      if (JSON.stringify(copyList(CFG.techniques[key].list)) !== JSON.stringify(defaultLists[key])) {
+        out[key] = copyList(CFG.techniques[key].list);
+      }
     });
-    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(out)); } catch (err) { /* private mode: works until the page is closed */ }
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(out));
+      localStorage.removeItem(OLD_SETTINGS_KEY);
+    } catch (err) { /* private mode: works until the page is closed */ }
   }
+
   // Highest value allowed = number of usable dots on the slider the technique moves (27 on Damage / Impact)
   function techniqueMax(T) {
     var s = CFG.sliders.filter(function (x) { return x.id === (T.slider || "impact"); })[0];
@@ -839,76 +874,185 @@
     return n;
   }
 
-  function openSettings() {
-    var nodes = [];
+  // A − value + control. get/set read and change the number.
+  function stepper(label, get, set, max) {
+    var wrap = el("span", "set-stepper");
+    var minus = el("button", "set-step", "−");
+    var val = el("span", "set-val");
+    var plus = el("button", "set-step", "+");
+    minus.type = plus.type = "button";
+    minus.setAttribute("aria-label", "Lower value: " + label);
+    plus.setAttribute("aria-label", "Raise value: " + label);
+    function show() {
+      val.textContent = get();
+      minus.disabled = get() <= 1;
+      plus.disabled = get() >= max;
+    }
+    minus.addEventListener("click", function () { if (get() > 1) { set(get() - 1); show(); } });
+    plus.addEventListener("click", function () { if (get() < max) { set(get() + 1); show(); } });
+    show();
+    wrap.appendChild(minus);
+    wrap.appendChild(val);
+    wrap.appendChild(plus);
+    return { node: wrap, val: val, show: show };
+  }
+
+  function settingsNodes() {
+    // CHANGED: Effective Strikes and Effective Grappling side by side (one column each)
+    var cols = el("div", "set-cols");
+    var nodes = [cols];
     Object.keys(CFG.techniques || {}).forEach(function (key) {
       var T = CFG.techniques[key];
       var max = techniqueMax(T);
-      nodes.push(el("div", "set-head", T.title));
-      if (!(T.list || []).length) {
-        nodes.push(el("p", "tech-empty", "No techniques yet."));
-        return;
-      }
-      // Listed in the same order as the popup (highest at the top when the Settings window opens)
+      var col = el("div", "set-col");
+      cols.appendChild(col);
+      col.appendChild(el("div", "set-head", T.title));
+      if (!(T.list || []).length) col.appendChild(el("p", "tech-empty", "No techniques yet."));
+
+      // One row per technique, highest value at the top
       sortedTechniques(T).forEach(function (t) {
         var row = el("div", "set-row");
-        row.appendChild(el("span", "set-name", t.name));
-        var minus = el("button", "set-step", "−");
-        var val = el("span", "set-val");
-        var plus = el("button", "set-step", "+");
-        minus.type = plus.type = "button";
-        minus.setAttribute("aria-label", "Lower value: " + t.name);
-        plus.setAttribute("aria-label", "Raise value: " + t.name);
-        function show() {
-          val.textContent = t.dots;
-          val.classList.toggle("changed", t.dots !== t._default);
-          minus.disabled = t.dots <= 1;
-          plus.disabled = t.dots >= max;
-        }
-        minus.addEventListener("click", function () { if (t.dots > 1) { t.dots--; saveTechniqueValues(); show(); } });
-        plus.addEventListener("click", function () { if (t.dots < max) { t.dots++; saveTechniqueValues(); show(); } });
-        show();
-        row.appendChild(minus);
-        row.appendChild(val);
-        row.appendChild(plus);
-        nodes.push(row);
+        var def = defaultFor(key, t.name);
+        var name = el("span", "set-name", t.name);
+        if (def === null) name.appendChild(el("span", "set-new", " (added)"));
+        row.appendChild(name);
+        var st = stepper(t.name, function () { return t.dots; }, function (v) {
+          t.dots = v;
+          saveTechniqueValues();
+          st.val.classList.toggle("changed", def === null || t.dots !== def);
+        }, max);
+        st.val.classList.toggle("changed", def === null || t.dots !== def);
+        row.appendChild(st.node);
+
+        // Delete: first tap asks "Delete?", second tap deletes
+        var del = el("button", "set-del", "Delete");
+        del.type = "button";
+        del.setAttribute("aria-label", "Delete technique: " + t.name);
+        del.addEventListener("click", function () {
+          if (!del.classList.contains("confirm")) {
+            del.classList.add("confirm");
+            del.textContent = "Delete?";
+            return;
+          }
+          T.list = T.list.filter(function (x) { return x !== t; });
+          saveTechniqueValues();
+          redrawSettings();
+        });
+        del.addEventListener("blur", function () {   // tapping somewhere else cancels
+          del.classList.remove("confirm");
+          del.textContent = "Delete";
+        });
+        row.appendChild(del);
+        col.appendChild(row);
       });
+
+      // Add a new technique: name, value, Add button
+      var addRow = el("div", "set-row set-add");
+      var input = el("input", "set-input");
+      input.type = "text";
+      input.maxLength = NAME_MAX;
+      input.placeholder = "New technique name";
+      input.setAttribute("aria-label", "New " + T.title + " technique name");
+      var newDots = 1;
+      var st2 = stepper("new technique", function () { return newDots; }, function (v) { newDots = v; }, max);
+      var add = el("button", "set-addbtn", "Add");
+      add.type = "button";
+      var msg = el("p", "set-msg");
+      function tryAdd() {
+        var nm = input.value.trim();
+        if (!nm) { msg.textContent = "Type a name first."; input.focus(); return; }
+        var dup = T.list.some(function (x) { return x.name.toLowerCase() === nm.toLowerCase(); });
+        if (dup) { msg.textContent = "That technique is already in the list."; input.focus(); return; }
+        T.list.push({ name: nm, dots: newDots });
+        saveTechniqueValues();
+        redrawSettings(key);
+      }
+      add.addEventListener("click", tryAdd);
+      input.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); tryAdd(); } });
+      input.addEventListener("input", function () { msg.textContent = ""; });
+      addRow.appendChild(input);
+      addRow.appendChild(st2.node);
+      addRow.appendChild(add);
+      addRow.dataset.key = key;
+      col.appendChild(addRow);
+      col.appendChild(msg);
     });
 
     var foot = el("div", "set-foot");
     foot.appendChild(el("span", "set-note",
-      "Value = dots added to Damage / Impact. Yellow = changed. Saved on this device only."));
+      "Value = dots added to Damage / Impact. Yellow = changed or added. Saved on this device only."));
     var restore = el("button", "set-restore", "Restore defaults");
     restore.type = "button";
     restore.addEventListener("click", function () {
+      if (!restore.classList.contains("confirm")) {   // first tap asks, second tap restores
+        restore.classList.add("confirm");
+        restore.textContent = "Restore? Added techniques will be removed";
+        return;
+      }
       Object.keys(CFG.techniques || {}).forEach(function (key) {
-        (CFG.techniques[key].list || []).forEach(function (t) { t.dots = t._default; });
+        CFG.techniques[key].list = copyList(defaultLists[key]);
       });
       saveTechniqueValues();
-      openSettings();   // redraw with the default numbers
+      redrawSettings();
+    });
+    restore.addEventListener("blur", function () {
+      restore.classList.remove("confirm");
+      restore.textContent = "Restore defaults";
     });
     foot.appendChild(restore);
     nodes.push(foot);
+    return nodes;
+  }
 
-    openPopup("Settings — Technique Values", nodes, false, true);
+  function openSettings() {
+    openPopup("Technique Effectiveness", settingsNodes(), false, true);   // CHANGED: title (blue, see styles.css)
+    popupBox.classList.add("popup-settings");   // CHANGED: wider, two columns
+  }
+  // Redraw the Settings window in place (after Add / Delete / Restore).
+  // focusKey = put the cursor back in that section's name box (after Add).
+  function redrawSettings(focusKey) {
+    var scroll = popupBox.scrollTop;
+    popupBody.innerHTML = "";
+    settingsNodes().forEach(function (n) { popupBody.appendChild(n); });
+    popupBox.scrollTop = scroll;
+    if (focusKey) {
+      var box = popupBody.querySelector('.set-add[data-key="' + focusKey + '"] .set-input');
+      if (box) box.focus();
+    } else {
+      popupClose.focus();
+    }
   }
   document.getElementById("settings").addEventListener("click", openSettings);
 
-  // Adds dots to one corner's slider. Moves outward one usable dot at a time,
-  // skipping line dots (same as the arrow keys). Stops at the last usable dot.
-  // Does NOT use the "one corner at a time" rule: the other corner keeps its values.
+  // CHANGED: a technique first TAKES dots away from the OTHER corner's slider.
+  // Only the dots left over are added to the chosen corner's slider.
+  // Example: Red Damage / Impact at 8, Blue technique worth 8 → Red back to 0, Blue stays 0.
+  //          Red at 3, Blue technique worth 5 → Red to 0, Blue to 2.
+  // Moves one usable dot at a time, skipping line dots (same as the arrow keys).
+  // Stops at the last usable dot. Only this slider changes (Dominance / Duration are not touched).
   function addToSlider(id, side, dots) {
     var s = CFG.sliders.filter(function (x) { return x.id === id; })[0];
     if (!s || !dots) return;
+    var other = side === "red" ? "blue" : "red";
     var k = state.values[id][side];
+    var ko = state.values[id][other];
     var max = sliderMax(s);
     for (var i = 0; i < dots; i++) {
+      if (ko > 0) {
+        // Step the other corner one usable dot back toward zero
+        var m = ko - 1;
+        while (m > 0 && !sliderLandable(s, m)) m--;
+        ko = m;
+        continue;
+      }
+      // Other corner is at zero: step the chosen corner one usable dot outward
       var n = k + 1;
       while (n <= max && !sliderLandable(s, n)) n++;
       if (n > max) break;
       k = n;
     }
     state.values[id][side] = k;
+    state.values[id][other] = ko;
     update();
   }
 

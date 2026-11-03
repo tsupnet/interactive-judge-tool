@@ -337,4 +337,35 @@ body {
   border: 1.5px solid var(--ink); background: #fff; cursor: pointer; white-space: nowrap;
 }
 .set-restore:hover { background: var(--link-hover); }
+/* CHANGED: Settings window is wider, with Effective Strikes and Effective Grappling side by side */
+.popup.popup-techniques.popup-settings { max-width: 1180px; }
+.popup.popup-settings h2 { color: var(--blue); }   /* CHANGED: "Technique Effectiveness" title in blue */
+.set-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 0 28px; align-items: start; }
+.set-col { min-width: 0; }
+.popup-settings .set-row { gap: 8px; font-size: 15px; }
+.popup-settings .set-del { min-width: 0; padding: 6px 7px; }
+.popup-settings .set-addbtn { min-width: 52px; }
+/* Very narrow screens (phones): one column again, so names stay readable */
+@media (max-width: 640px) { .set-cols { grid-template-columns: 1fr; } }
+/* CHANGED: add / delete techniques */
+.set-stepper { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+.set-new { font-style: italic; color: var(--muted); font-size: 14px; }
+.set-del {
+  font-family: var(--sans); font-size: 13px; padding: 6px 8px; min-width: 70px;
+  border: 1.5px solid var(--ink); background: #fff; cursor: pointer; flex: none;
+}
+.set-del:hover { background: var(--link-hover); }
+.set-del.confirm, .set-restore.confirm { background: var(--red); color: #fff; border-color: var(--red); font-weight: 700; }
+.set-add { border-bottom: 0; padding-top: 8px; }
+.set-input {
+  flex: 1; min-width: 0; font-family: var(--serif);
+  font-size: 16px;   /* 16px or more: the iPad does not zoom in when typing */
+  padding: 6px 8px; border: 1.5px solid var(--ink);
+}
+.set-addbtn {
+  font-family: var(--sans); font-size: 14px; font-weight: 700; padding: 7px 0; min-width: 70px;
+  border: 1.5px solid var(--ink); background: var(--tag); cursor: pointer; flex: none;
+}
+.popup p.set-msg { color: var(--red); font-size: 14px; margin: 2px 0 4px; min-height: 0; }
+.popup p.set-msg:empty { display: none; }
 .missing-image { border: 2px dashed #999; padding: 14px; text-align: center; color: var(--muted); margin: 8px 0; }
