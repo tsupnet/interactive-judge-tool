@@ -52,7 +52,7 @@ window.FSL_CONFIG = {
      opens a list of techniques. CHANGED: the user picks a technique
      first, then Red or Blue. Clicking the color ADDS the technique's
      dots to that fighter's slider and closes the popup
-     (slider: "impact" = Damage / Impact). Line dots are skipped, the
+     (slider: "impact" = Impact / Damage). Line dots are skipped, the
      same way the arrow keys skip them.
      CHANGED: a technique first takes dots away from the OTHER corner's
      slider; only the dots left over are added to the chosen corner.
@@ -108,7 +108,9 @@ window.FSL_CONFIG = {
     owner: "tsupnet",
     repo: "interactive-judge-tool",
     branch: "main",
-    file: "techniques.json"
+    file: "techniques.json",
+    aboutFile: "about.json",   // NEW: the About page text
+    settingsFile: "settings.json"   // NEW: Duration settings saved from the gear window
   },
 
   /* ---------------- DURATION RULES (CHANGED) ----------------------------
@@ -122,6 +124,8 @@ window.FSL_CONFIG = {
          the speed it had inside the window (1/3 = one third as fast).
      Rounding and skipping of line dots is done the same way as for the
      other sliders. Change any number here to tune the behavior.          */
+  // NEW: these are the DEFAULTS. Tom can change them in the gear window
+  // (Duration scale tab); saved changes live in settings.json on GitHub.
   durationRules: {
     startDot: 1,
     endDot: 11,
@@ -191,7 +195,7 @@ window.FSL_CONFIG = {
   sliders: [
     {
       id: "impact",
-      title: "Damage / Impact",
+      title: "Impact / Damage",
       term: "impact",
       group: "tenEight",
       caption: "Impact includes visible evidence such as swelling and lacerations. Impact shall also be assessed when a fighter’s actions, using striking and/or grappling,<br>lead to a diminishing of their opponent’s energy, confidence, abilities and spirit, even though they may not have dominated the action",
@@ -201,7 +205,7 @@ window.FSL_CONFIG = {
         { label: "( 10-8 )", dots: 10 },
         { label: "( 10-7 )", dots: 10 }
       ],
-      /* needleMap = which MAIN NEEDLE dot each Damage / Impact dot moves to.
+      /* needleMap = which MAIN NEEDLE dot each Impact / Damage dot moves to.
          Left number = Impact dot. Right number = main needle dot.
          Dots 10, 20, 30 are line dots (skipped), so they are not listed.
          Red works the same way, toward the Red side.
@@ -237,7 +241,7 @@ window.FSL_CONFIG = {
       // QUESTION FOR TOM: on your chart, Blue has Low Impact nearest the
       // center, but Red has HIGH Impact nearest the center. This file
       // uses Low nearest the center on BOTH sides (mirrored, like
-      // Damage / Impact and Duration). Confirm which is correct.
+      // Impact / Damage and Duration). Confirm which is correct.
       segments: [
         { label: "Low Impact",    short: "Low",  dots: 10 },
         { label: "Medium Impact", short: "Med",  dots: 10 },
@@ -279,8 +283,18 @@ window.FSL_CONFIG = {
       caption: "<u>Aggressively making attempts to finish the fight <b>-</b> Only used when striking and grappling are even</u>",
       lockedText: "Locked — only used when Effective Strikes / Grappling are even (needle at Draw).",
       labelStyle: "span",
-      segments: [{ label: "", dots: 10 }],
-      ratio: 0
+      /* CHANGED (Tom new chart, 2026-11-04): two usable dots per side,
+         joined by dashes, then the line dot at the outer end:
+         center ---- dot 1 ---- dot 2 ---- | end
+         Drawn as 9 positions: usable dots at 3 and 6 (the rest are
+         dashes, like Dominance); 9 = the line dot (not usable).
+         First dot  → main needle dot 1 (10-9 Close).
+         Second dot → main needle dot 5 (the middle of 10-9).
+         Red and Blue cancel out.                                          */
+      segments: [{ label: "", dots: 9 }],
+      landableDots: [3, 6],
+      needleMap: { 3: 1, 6: 5 },
+      ratio: 0   // not used while needleMap is set
     },
     {
       id: "cage",
@@ -290,8 +304,13 @@ window.FSL_CONFIG = {
       caption: "<u>Dictating the pace, place and position of the fight <b>-</b> Only used when striking, grappling and aggression are even</u>",
       lockedText: "Locked — only used when striking, grappling AND aggression are even.",
       labelStyle: "span",
-      segments: [{ label: "", dots: 10 }],
-      ratio: 0
+      /* CHANGED (Tom new chart, 2026-11-04): same as Effective
+         Aggressiveness — two usable dots: first → main needle dot 1
+         (10-9 Close), second → dot 5 (middle of 10-9).                    */
+      segments: [{ label: "", dots: 9 }],
+      landableDots: [3, 6],
+      needleMap: { 3: 1, 6: 5 },
+      ratio: 0   // not used while needleMap is set
     }
   ],
 

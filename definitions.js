@@ -53,7 +53,7 @@ window.FSL_DEFINITIONS = {
   },
 
   impact: {
-    title: "Damage / Impact",
+    title: "Impact / Damage",
     body: [
       "A judge shall assess if a fighter impacts their opponent significantly in the round, even though they may not have dominated the action.",
       "Impact includes visible evidence such as swelling and lacerations.",

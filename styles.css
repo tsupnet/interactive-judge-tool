@@ -358,6 +358,73 @@ body {
 .set-save.dirty { background: var(--tag); }                           /* yellow = changes not saved yet */
 .set-name.changed { background: var(--tag); }
 .set-input.changed { background: #fff9c4; }
+/* ---------- NEW: About button (next to the gear) ---------- */
+.about-btn {
+  display: inline-flex; align-items: center; gap: 4px; flex: none;
+  height: 20px; padding: 0 8px 0 4px; border: 1.5px solid var(--ink); border-radius: 10px;
+  background: #fff; cursor: pointer; font-family: var(--sans); font-size: 12px; font-weight: 700; color: var(--ink);
+}
+.about-btn svg { width: 14px; height: 14px; display: block; }
+.about-btn circle { stroke: var(--ink); }
+.about-btn path { fill: var(--ink); }
+.about-btn:hover, .about-btn:focus-visible { background: var(--link-hover); outline: none; }
+
+/* ---------- NEW: About window ---------- */
+.popup.popup-techniques.popup-about { max-width: 900px; }
+.popup.popup-about #popup-title { color: var(--blue); }
+.about-content { min-height: 60px; }
+.about-text { font-family: var(--serif); font-size: 17px; line-height: 1.5; color: var(--ink); }
+.popup .about-text h2 { font-size: 22px; margin: 14px 0 6px; text-align: left; color: var(--ink); text-decoration: none; font-weight: 700; }
+.popup .about-text h3 { font-size: 18px; margin: 12px 0 4px; text-align: left; color: var(--ink); text-decoration: none; font-weight: 700; }
+.popup .about-text > :first-child { margin-top: 0; }
+.about-text p { margin: 0 0 10px; }
+.about-text ul, .about-text ol { margin: 0 0 10px; padding-left: 26px; }
+.about-text li { margin: 2px 0; }
+.about-text a { color: var(--blue); }
+.about-foot { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+.about-foot .set-msg { flex: 1; margin: 0; text-align: left; min-width: 200px; }
+.about-editbtn {
+  font-family: var(--sans); font-size: 13px; padding: 5px 14px;
+  border: 1.5px solid var(--ink); background: #fff; cursor: pointer;
+}
+.about-editbtn:hover { background: var(--link-hover); }
+/* editor */
+.popup .about-text .center { text-align: center; }   /* centered lines (Center button or pasted) */
+.about-toolbar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
+.about-tool {
+  font-family: var(--sans); font-size: 13px; padding: 5px 10px; min-width: 34px;
+  border: 1.5px solid var(--ink); background: #fff; cursor: pointer;
+}
+.about-tool:hover { background: var(--link-hover); }
+.about-editor {
+  min-height: 260px; max-height: 55vh; overflow-y: auto;
+  border: 1.5px solid var(--ink); padding: 10px 12px; background: #fff;
+  font-size: 16px;   /* 16px or more: the iPad does not zoom in when typing */
+}
+.about-editor:focus { outline: 3px solid var(--tag); }
+.popup p.about-hint { font-size: 13px; color: var(--muted); margin: 6px 0 0; }
+
+/* ---------- NEW: tabs in the gear window + Duration settings ---------- */
+.gear-tabs { display: flex; gap: 0; margin: 0 0 14px; border-bottom: 2px solid var(--ink); }
+.gear-tab {
+  font-family: var(--sans); font-size: 14px; font-weight: 700; padding: 8px 18px; margin-bottom: -2px;
+  border: 2px solid transparent; border-bottom: 0; background: none; color: var(--muted); cursor: pointer;
+}
+.gear-tab.on { border-color: var(--ink); background: #fff; color: var(--ink); border-radius: 6px 6px 0 0; }
+.gear-tab:hover:not(.on) { color: var(--ink); }
+.popup p.dur-intro { font-size: 15px; margin: 0 0 6px; }
+.dur-grid { display: grid; grid-template-columns: minmax(150px, max-content) max-content max-content; gap: 8px 22px; align-items: center; margin: 4px 0 8px; }
+.dur-grid2 { grid-template-columns: minmax(150px, max-content) max-content; }
+.dur-colhead { font-family: var(--sans); font-size: 12px; font-weight: 700; color: var(--muted); text-align: center; }
+.dur-name { font-size: 16px; }
+.dur-val { width: auto; min-width: 56px; padding: 2px 6px; white-space: nowrap; }
+.dur-select { font-family: var(--sans); font-size: 16px; padding: 6px 8px; border: 1.5px solid var(--ink); background: #fff; margin: 4px 0 8px; }
+.dur-select.changed { background: var(--tag); }
+.dur-round { display: inline-flex; gap: 8px; padding: 3px; margin: 4px 0 8px; }
+.dur-round.changed { background: var(--tag); }
+.about-tab { font-family: var(--sans); font-size: 14px; padding: 7px 14px; border: 1.5px solid var(--ink); background: #fff; cursor: pointer; }
+.about-tab.on { background: var(--ink); color: #fff; }
+
 /* CHANGED: password screens (setup, unlock, change password) */
 .popup.popup-techniques.popup-lock { max-width: 520px; }
 .popup.popup-lock h2 { color: var(--blue); }

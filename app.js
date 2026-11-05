@@ -11,7 +11,7 @@
    - Opens the popups for hyperlinked words
    - NEW: red "Effective Strikes" / "Effective Grappling" open the techniques
      popups (list in config.js → techniques); a technique adds dots to the
-     chosen fighter's Damage / Impact slider
+     chosen fighter's Impact / Damage slider
    - CHANGED: gear button beside "3 min" asks for a password, then opens
      Technique Effectiveness, where techniques can be added, deleted, renamed
      (Edit) and re-valued. Save writes them to techniques.json on GitHub,
@@ -439,7 +439,8 @@
       return Math.floor(sec / 60) + ":" + twoDigits(sec % 60);
     }
     var d = s._dots[k - 1];
-    if (s.landableDots) return d.seg.label;   // CHANGED: Dominance reads "Low Impact" etc.
+    // CHANGED: Dominance reads "Low Impact" etc.; Aggressiveness / Cage (no labels) read "Dot 1 of 2"
+    if (s.landableDots) return d.seg.label || ("Dot " + (s.landableDots.indexOf(k) + 1) + " of " + s.landableDots.length);
     if (!d.seg.label) return k + " of " + s._dots.length;
     return d.seg.label + " · " + d.dotInSeg + " of " + d.seg.dots;
   }
@@ -708,6 +709,7 @@
     popupBox.classList.toggle("popup-techniques", !!techMode);
     popupBox.classList.remove("popup-settings");   // CHANGED: only the Settings window is extra wide (added back by openSettings)
     popupBox.classList.remove("popup-lock");       // CHANGED: password screens (added back when shown)
+    popupBox.classList.remove("popup-about");      // NEW: About window (added back when shown)
     popupTitle.textContent = title;
     popupBody.innerHTML = "";
     nodes.forEach(function (n) { popupBody.appendChild(n); });
@@ -863,7 +865,7 @@
     } catch (err) { /* private mode: works until the page is closed */ }
   }
 
-  // Highest value allowed = number of usable dots on the slider the technique moves (27 on Damage / Impact)
+  // Highest value allowed = number of usable dots on the slider the technique moves (27 on Impact / Damage)
   function techniqueMax(T) {
     var s = CFG.sliders.filter(function (x) { return x.id === (T.slider || "impact"); })[0];
     if (!s) return 1;
@@ -929,9 +931,11 @@
   }
 
   function settingsNodes() {
+    // NEW: the Duration tab
+    if (gearTab === "duration") return [gearTabs()].concat(durationNodes());
     // Effective Strikes and Effective Grappling side by side (one column each)
     var cols = el("div", "set-cols");
-    var nodes = [cols];
+    var nodes = [gearTabs(), cols];   // CHANGED: tabs on top
     Object.keys(CFG.techniques || {}).forEach(function (key) {
       var T = CFG.techniques[key];
       var list = draft[key];   // already sorted when the window opened / after Save
@@ -1042,7 +1046,7 @@
     // Bottom line: note on the left, Edit + Save on the right
     var foot = el("div", "set-foot");
     foot.appendChild(el("span", "set-note",
-      "Value = dots added to Damage / Impact. Yellow = not saved yet. Save sends the list to GitHub for all your devices."));
+      "Value = dots added to Impact / Damage. Yellow = not saved yet. Save sends the list to GitHub for all your devices."));
     var btns = el("span", "set-footbtns");
     // CHANGED: Change password (this device)
     var chpw = el("button", "set-edit set-chpw", "Change password");
@@ -1207,8 +1211,9 @@
   }
   function ghError(status) { var e = new Error("github " + status); e.status = status; return e; }
   // Read techniques.json straight from GitHub (newest version, no waiting)
-  function ghReadFile(token) {
-    return gh(token, "GET", "/contents/" + SYNC.file + "?ref=" + encodeURIComponent(SYNC.branch)).then(function (r) {
+  function ghReadFile(token, file) {   // CHANGED: file is optional (default techniques.json)
+    file = file || SYNC.file;
+    return gh(token, "GET", "/contents/" + file + "?ref=" + encodeURIComponent(SYNC.branch)).then(function (r) {
       if (r.status === 404) return null;   // file not there yet
       if (!r.ok) throw ghError(r.status);
       return r.json().then(function (j) { return { sha: j.sha, data: JSON.parse(b64ToText(j.content || "")) }; });
@@ -1266,27 +1271,35 @@
   function onEnter(inputs, fn) {
     inputs.forEach(function (i) { i.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); fn(); } }); });
   }
+  // CHANGED: the password screens are shared by the gear and the About window.
+  // lockTarget = what to open after the password (title shown, what it is for, what to open).
+  var lockTarget = { title: "Technique Effectiveness", what: "change the techniques", next: function () { openEditor(); } };
   function showPanel(nodes, focusInput) {
-    openPopup("Technique Effectiveness", nodes, false, true);
+    openPopup(lockTarget.title, nodes, false, true);
     popupBox.classList.add("popup-lock");
     if (focusInput) focusInput.focus();
+  }
+  // Ask for the password (or first-time setup) only if needed, then open "next"
+  function withUnlock(title, what, next) {
+    lockTarget = { title: title, what: what, next: next };
+    if (!cryptoOK) {
+      openPopup(title, [el("p", null,
+        "This browser can't keep the password safe. Please use a current version of Safari or Chrome.")], false, true);
+      return;
+    }
+    if (sessionToken) { next(); return; }   // already unlocked since the page opened
+    if (hasStoredKey()) showUnlock(); else showSetup();
   }
 
   // ---------- the gear ----------
   function openSettings() {
-    if (!cryptoOK) {
-      openPopup("Technique Effectiveness", [el("p", null,
-        "This browser can't keep the password safe. Please use a current version of Safari or Chrome.")], false, true);
-      return;
-    }
-    if (sessionToken) { openEditor(); return; }   // already unlocked since the page opened
-    if (hasStoredKey()) showUnlock(); else showSetup();
+    withUnlock("Technique Effectiveness", "change the techniques", function () { openEditor(); });
   }
 
   // Password screen
   function showUnlock() {
     var form = el("div", "lock-form");
-    form.appendChild(el("p", "lock-intro", "Enter your password to change the techniques."));
+    form.appendChild(el("p", "lock-intro", "Enter your password to " + lockTarget.what + "."));
     var pw = field("Password", "password", "current-password");
     form.appendChild(pw.node);
     var msg = el("p", "set-msg");
@@ -1296,7 +1309,7 @@
       go.disabled = true; msg.textContent = "";
       unlockToken(pw.input.value).then(function (token) {
         sessionToken = token;
-        openEditor();
+        lockTarget.next();   // CHANGED: techniques window or About editor
       }).catch(function () {
         go.disabled = false;
         msg.textContent = "Wrong password.";
@@ -1340,7 +1353,7 @@
         return lockToken(token, pw1.input.value);
       }).then(function () {
         sessionToken = token;
-        openEditor();
+        lockTarget.next();   // CHANGED: techniques window or About editor
       }).catch(function (err) {
         go.disabled = false;
         msg.textContent = ghMessage(err, "check the key");
@@ -1407,13 +1420,289 @@
     cur.input.focus();
   }
 
+  // ==================================================================
+  // NEW: DURATION SETTINGS (second tab of the gear window)
+  // Tom can change the Duration time windows, where the needle starts and
+  // ends inside a window, what happens after the window, and the round
+  // length the tool opens with. Saved to GitHub as settings.json, so every
+  // device uses the same numbers. config.js keeps the defaults.
+  // ==================================================================
+  var SETTINGS_FILE = SYNC.settingsFile || "settings.json";
+  var SETTINGS_CACHE = "ijt-settings-cache-v1";
+  var LEVEL_KEYS = ["High", "Med", "Low"];
+  var LEVEL_NAMES = { High: "High Dominance", Med: "Medium Dominance", Low: "Low Dominance" };
+  var AFTER_CHOICES = [
+    { v: 0, label: "Stop (stay where it is)" },
+    { v: 0.25, label: "Keep moving at ¼ speed" },
+    { v: 1 / 3, label: "Keep moving at ⅓ speed" },
+    { v: 0.5, label: "Keep moving at ½ speed" },
+    { v: 1, label: "Keep moving at the same speed" }
+  ];
+  var SEC_STEP = 6;   // one Duration dot
+  function copyDuration(d) { return JSON.parse(JSON.stringify(d)); }
+  function currentDuration() {
+    var R = CFG.durationRules;
+    return copyDuration({ levels: R.levels, startDot: R.startDot, endDot: R.endDot, afterRate: R.afterRate,
+      defaultMinutes: CFG.roundLength.defaultMinutes });
+  }
+  var gearTab = "tech";        // which tab of the gear window is showing: "tech" or "duration"
+  var durDraft = null, durOrig = null, settingsSha = null, roundTouched = false;
+
+  // Check numbers from settings.json; anything broken → null (the tool keeps what it has)
+  function cleanDuration(d) {
+    if (!d || typeof d !== "object" || !d.levels) return null;
+    var full = CFG.roundLength.fullRoundSeconds, out = { levels: {} };
+    for (var i = 0; i < LEVEL_KEYS.length; i++) {
+      var L = d.levels[LEVEL_KEYS[i]];
+      if (!L || typeof L.startSec !== "number" || typeof L.endSec !== "number") return null;
+      if (L.startSec < 0 || L.endSec > full || L.endSec <= L.startSec) return null;
+      out.levels[LEVEL_KEYS[i]] = { startSec: Math.round(L.startSec), endSec: Math.round(L.endSec) };
+    }
+    if (!(d.startDot >= 1 && d.endDot <= MAIN_STEPS && d.endDot > d.startDot)) return null;
+    if (!mainLandable(d.startDot) || !mainLandable(d.endDot)) return null;
+    if (!(typeof d.afterRate === "number" && d.afterRate >= 0 && d.afterRate <= 1)) return null;
+    out.startDot = Math.round(d.startDot);
+    out.endDot = Math.round(d.endDot);
+    out.afterRate = d.afterRate;
+    out.defaultMinutes = d.defaultMinutes === 3 ? 3 : 5;
+    return out;
+  }
+  function applySettings(data) {
+    var d = cleanDuration(data && data.duration);
+    if (!d) return false;
+    var R = CFG.durationRules;
+    R.levels = d.levels; R.startDot = d.startDot; R.endDot = d.endDot; R.afterRate = d.afterRate;
+    CFG.roundLength.defaultMinutes = d.defaultMinutes;
+    return true;
+  }
+  function readSettingsCache() { try { return JSON.parse(localStorage.getItem(SETTINGS_CACHE) || "null"); } catch (err) { return null; } }
+  function writeSettingsCache(d) { try { localStorage.setItem(SETTINGS_CACHE, JSON.stringify(d)); } catch (err) { /* private mode */ } }
+  // If nobody has picked a round length or used Duration yet, open with the saved round length
+  function useDefaultRoundLength() {
+    var used = CFG.sliders.some(function (s) { return s.valueFormat === "time" && (state.values[s.id].red || state.values[s.id].blue); });
+    if (roundTouched || used || state.roundMin === CFG.roundLength.defaultMinutes) return;
+    state.roundMin = CFG.roundLength.defaultMinutes;
+    applyRoundLength();
+  }
+  // When the page opens: newest settings.json from the website (unless this device saved newer)
+  function fetchSettingsFromSite() {
+    if (!window.fetch) return;
+    fetch(SETTINGS_FILE + "?v=" + Date.now(), { cache: "no-store" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        if (!data || !data.duration) return;
+        var c = readSettingsCache();
+        if (c && c.savedAt && data.savedAt && c.savedAt > data.savedAt) return;   // ours is newer
+        if (applySettings(data)) {
+          writeSettingsCache(data);
+          useDefaultRoundLength();
+          update();
+        }
+      })
+      .catch(function () { /* no internet, or opened as a local file */ });
+  }
+
+  // Name of a main-needle dot, e.g. 1 → "10-9 Close", 11 → "10-8 Close"
+  function needleDotName(p) {
+    var zones = CFG.mainNeedle.zones, z = Math.min(zones.length - 1, Math.floor((p - 1) / 10));
+    var inZone = p - z * 10, zone = zones[z], part = zone.parts[zone.parts.length - 1];
+    for (var i = 0; i < zone.parts.length; i++) { if (inZone <= zone.parts[i].upTo) { part = zone.parts[i]; break; } }
+    return zone.score + " " + (part.label.length > 12 ? "" : part.label);
+  }
+  function mmss(sec) { var m = Math.floor(sec / 60), s = sec % 60; return m + ":" + (s < 10 ? "0" : "") + s; }
+
+  // A − value + control for any number. fmt = how the value is shown, next/prev = the allowed steps.
+  function valueStepper(label, get, set, next, prev, fmt) {
+    var wrap = el("span", "set-stepper dur-stepper");
+    var minus = el("button", "set-step", "−"), val = el("span", "set-val dur-val"), plus = el("button", "set-step", "+");
+    minus.type = plus.type = "button";
+    minus.setAttribute("aria-label", "Lower: " + label);
+    plus.setAttribute("aria-label", "Raise: " + label);
+    function show() {
+      val.textContent = fmt(get());
+      minus.disabled = prev(get()) === null;
+      plus.disabled = next(get()) === null;
+    }
+    minus.addEventListener("click", function () { var v = prev(get()); if (v !== null) { set(v); refreshDuration(); } });
+    plus.addEventListener("click", function () { var v = next(get()); if (v !== null) { set(v); refreshDuration(); } });
+    show();
+    wrap.appendChild(minus); wrap.appendChild(val); wrap.appendChild(plus);
+    wrap._show = show;
+    wrap._val = val;
+    return wrap;
+  }
+  function nextLandable(p, limit) { var n = p + 1; while (n <= limit && !mainLandable(n)) n++; return n <= limit ? n : null; }
+  function prevLandable(p, limit) { var n = p - 1; while (n >= limit && !mainLandable(n)) n--; return n >= limit ? n : null; }
+
+  // Tabs at the top of the gear window
+  function gearTabs() {
+    var bar = el("div", "gear-tabs");
+    [["tech", "Techniques"], ["duration", "Duration scale"]].forEach(function (t) {
+      var b = el("button", "gear-tab" + (gearTab === t[0] ? " on" : ""), t[1]);
+      b.type = "button";
+      b.setAttribute("aria-pressed", gearTab === t[0] ? "true" : "false");
+      b.addEventListener("click", function () {
+        if (gearTab === t[0]) return;
+        gearTab = t[0];
+        redrawSettings();   // each tab keeps its own unsaved changes
+      });
+      bar.appendChild(b);
+    });
+    return bar;
+  }
+
+  var durSteppers = [];
+  function refreshDuration() {   // redraw numbers + yellow marks without rebuilding the tab
+    durSteppers.forEach(function (s) { s._show(); s._val.classList.toggle("changed", s._changed()); });
+    var sv = popupBody.querySelector(".dur-save");
+    var dirty = JSON.stringify(durDraft) !== JSON.stringify(durOrig);
+    if (sv) sv.classList.toggle("dirty", dirty);
+    var m = popupBody.querySelector(".dur-msg");
+    if (m && dirty && m.classList.contains("ok")) { m.textContent = ""; m.classList.remove("ok"); }
+  }
+
+  function durationNodes() {
+    durSteppers = [];
+    var nodes = [];
+    var full = CFG.roundLength.fullRoundSeconds;
+    nodes.push(el("p", "dur-intro",
+      "Duration moves the main needle only inside the time window of the fighter's Dominance level. " +
+      "Times are for a 5-minute round; in a 3-minute round every time is multiplied by 3/5 automatically."));
+
+    // 1. Time windows
+    nodes.push(el("div", "set-head", "Time windows (5-minute round)"));
+    var grid = el("div", "dur-grid");
+    ["", "Window starts", "Window ends"].forEach(function (h) { grid.appendChild(el("span", "dur-colhead", h)); });
+    LEVEL_KEYS.forEach(function (k) {
+      grid.appendChild(el("span", "dur-name", LEVEL_NAMES[k]));
+      var L = durDraft.levels[k];
+      var s1 = valueStepper(LEVEL_NAMES[k] + " start",
+        function () { return L.startSec; }, function (v) { L.startSec = v; },
+        function (v) { return v + SEC_STEP <= L.endSec - SEC_STEP ? v + SEC_STEP : null; },
+        function (v) { return v - SEC_STEP >= 0 ? v - SEC_STEP : null; }, mmss);
+      s1._changed = function () { return L.startSec !== durOrig.levels[k].startSec; };
+      var s2 = valueStepper(LEVEL_NAMES[k] + " end",
+        function () { return L.endSec; }, function (v) { L.endSec = v; },
+        function (v) { return v + SEC_STEP <= full ? v + SEC_STEP : null; },
+        function (v) { return v - SEC_STEP >= L.startSec + SEC_STEP ? v - SEC_STEP : null; }, mmss);
+      s2._changed = function () { return L.endSec !== durOrig.levels[k].endSec; };
+      durSteppers.push(s1, s2);
+      grid.appendChild(s1); grid.appendChild(s2);
+    });
+    nodes.push(grid);
+
+    // 2. Where the needle is at the start and end of a window
+    nodes.push(el("div", "set-head", "Main needle inside a window"));
+    var g2 = el("div", "dur-grid dur-grid2");
+    var dotFmt = function (p) { return "dot " + p + " · " + needleDotName(p); };
+    g2.appendChild(el("span", "dur-name", "When a window starts"));
+    var d1 = valueStepper("needle when a window starts",
+      function () { return durDraft.startDot; }, function (v) { durDraft.startDot = v; },
+      function (v) { var n = nextLandable(v, MAIN_STEPS); return n !== null && n < durDraft.endDot ? n : null; },
+      function (v) { return prevLandable(v, 1); }, dotFmt);
+    d1._changed = function () { return durDraft.startDot !== durOrig.startDot; };
+    g2.appendChild(d1);
+    g2.appendChild(el("span", "dur-name", "When a window ends"));
+    var d2 = valueStepper("needle when a window ends",
+      function () { return durDraft.endDot; }, function (v) { durDraft.endDot = v; },
+      function (v) { return nextLandable(v, MAIN_STEPS); },
+      function (v) { var n = prevLandable(v, 1); return n !== null && n > durDraft.startDot ? n : null; }, dotFmt);
+    d2._changed = function () { return durDraft.endDot !== durOrig.endDot; };
+    g2.appendChild(d2);
+    durSteppers.push(d1, d2);
+    nodes.push(g2);
+    nodes.push(el("p", "about-hint", "The needle moves evenly from the start dot to the end dot while the window runs. Dots with a line are skipped."));
+
+    // 3. After the window
+    nodes.push(el("div", "set-head", "After the window ends"));
+    var sel = el("select", "dur-select");
+    sel.setAttribute("aria-label", "After the window ends");
+    AFTER_CHOICES.forEach(function (c, i) {
+      var o = el("option", null, c.label);
+      o.value = String(i);
+      if (Math.abs(c.v - durDraft.afterRate) < 1e-9) o.selected = true;
+      sel.appendChild(o);
+    });
+    function markSel() { sel.classList.toggle("changed", Math.abs(durDraft.afterRate - durOrig.afterRate) > 1e-9); }
+    sel.addEventListener("change", function () { durDraft.afterRate = AFTER_CHOICES[Number(sel.value)].v; markSel(); refreshDuration(); });
+    markSel();
+    nodes.push(sel);
+
+    // 4. Round length when the tool opens
+    nodes.push(el("div", "set-head", "Round length when the tool opens"));
+    var rl = el("div", "dur-round");
+    [5, 3].forEach(function (m) {
+      var b = el("button", "about-tab dur-rl" + (durDraft.defaultMinutes === m ? " on" : ""), m + " min");
+      b.type = "button";
+      b.addEventListener("click", function () {
+        durDraft.defaultMinutes = m;
+        var all = rl.querySelectorAll(".dur-rl");
+        for (var i = 0; i < all.length; i++) all[i].classList.toggle("on", all[i] === b);
+        rl.classList.toggle("changed", durDraft.defaultMinutes !== durOrig.defaultMinutes);
+        refreshDuration();
+      });
+      rl.appendChild(b);
+    });
+    rl.classList.toggle("changed", durDraft.defaultMinutes !== durOrig.defaultMinutes);
+    nodes.push(rl);
+
+    // Bottom: note, Restore defaults, Save
+    var foot = el("div", "set-foot");
+    foot.appendChild(el("span", "set-note", "Yellow = not saved yet. Save sends these settings to GitHub for all your devices."));
+    var btns = el("span", "set-footbtns");
+    // CHANGED: "Restore defaults" removed (Tom, 2026-11-04)
+    var save = el("button", "set-save dur-save" + (JSON.stringify(durDraft) !== JSON.stringify(durOrig) ? " dirty" : ""), "Save");
+    save.type = "button";
+    save.addEventListener("click", saveDuration);
+    btns.appendChild(save);
+    foot.appendChild(btns);
+    nodes.push(foot);
+    nodes.push(el("p", "set-msg set-footmsg dur-msg"));
+    setTimeout(refreshDuration, 0);
+    return nodes;
+  }
+
+  function saveDuration() {
+    var msg = popupBody.querySelector(".dur-msg"), save = popupBody.querySelector(".dur-save");
+    var clean = cleanDuration(durDraft);
+    msg.classList.remove("ok");
+    if (!clean) { msg.textContent = "Some numbers don't fit together. Check that every window ends after it starts."; return; }
+    var data = { savedAt: new Date().toISOString(), duration: clean };
+    save.disabled = true;
+    msg.classList.add("busy");
+    msg.textContent = "Saving to GitHub…";
+    ghWriteRaw(SETTINGS_FILE, textToB64(JSON.stringify(data, null, 2) + "\n"), settingsSha, "Update Duration settings").then(function (j) {
+      settingsSha = (j && j.content && j.content.sha) || settingsSha;
+      applySettings(data);
+      writeSettingsCache(data);
+      update();   // the needle uses the new numbers right away
+      durOrig = copyDuration(clean);
+      durDraft = copyDuration(clean);
+      redrawSettings();
+      var done = popupBody.querySelector(".dur-msg");
+      done.classList.add("ok");
+      done.textContent = "Saved to GitHub. Your other devices use it the next time the tool is opened or reloaded (usually 1–2 minutes).";
+    }).catch(function (err) {
+      save.disabled = false;
+      msg.classList.remove("busy");
+      msg.textContent = ghMessage(err, "save") + " Nothing was saved yet — your changes are still here.";
+    });
+  }
+
   // The Technique Effectiveness window: first get the newest list from GitHub
   function openEditor() {
     openPopup("Technique Effectiveness", [el("p", "lock-intro", "Getting the newest list from GitHub…")], false, true);
     popupBox.classList.add("popup-settings");
-    ghReadFile(sessionToken).then(function (file) {
+    // CHANGED: read the techniques AND the Duration settings, newest from GitHub
+    Promise.all([ghReadFile(sessionToken), ghReadFile(sessionToken, SETTINGS_FILE)]).then(function (res) {
+      var file = res[0], sfile = res[1];
       if (file && applyShared(file.data)) writeCache(file.data);
       remoteSha = file ? file.sha : null;
+      if (sfile && applySettings(sfile.data)) { writeSettingsCache(sfile.data); update(); }
+      settingsSha = sfile ? sfile.sha : null;
+      durOrig = currentDuration();
+      durDraft = copyDuration(durOrig);
+      gearTab = "tech";
       flashNames = null;
       makeDraft();
       redrawSettings();
@@ -1501,6 +1790,7 @@
   // focusKey = put the cursor back in that section's "new technique" box (after Add).
   // focusFirstName = put the cursor in the first name box (after Edit).
   function redrawSettings(focusKey, focusFirstName) {
+    popupTitle.textContent = gearTab === "duration" ? "Duration Settings" : "Technique Effectiveness";   // NEW
     popupBox.classList.remove("popup-lock");
     popupBox.classList.add("popup-settings");
     var scroll = popupBox.scrollTop;
@@ -1522,9 +1812,351 @@
   }
   document.getElementById("settings").addEventListener("click", openSettings);
 
+  // ==================================================================
+  // NEW: ABOUT WINDOW (button next to the gear)
+  // - Everyone can read it.
+  // - Tom edits it (password): type or paste text — headings, bold, italic,
+  //   lists, centered lines and links are kept.
+  // - Save sends it to GitHub (about.json), so every device shows the same page.
+  //   (CHANGED: the PDF option was removed — text only.)
+  // ==================================================================
+  var ABOUT_FILE = SYNC.aboutFile || "about.json";
+  var ABOUT_CACHE = "ijt-about-cache-v1";
+
+  // ---------- cleaning text (only simple, safe formatting is kept) ----------
+  // Keeps: headings, paragraphs, bold, italic, underline, bullet / numbered lists,
+  // centered lines, links. Everything else (Word's hidden extras, colors, fonts,
+  // pictures, scripts) is removed.
+  function cleanHtml(html) {
+    var doc = new DOMParser().parseFromString("<div>" + (html || "") + "</div>", "text/html");
+    var out = document.createElement("div");
+    function isCentered(n) {
+      var st = (n.getAttribute("style") || "").toLowerCase().replace(/\s/g, "");
+      return /text-align:center/.test(st) || (n.getAttribute("align") || "").toLowerCase() === "center" ||
+        /(^|\s)center(\s|$)/.test(n.getAttribute("class") || "");
+    }
+    function walk(src, dst) {
+      for (var i = 0; i < src.childNodes.length; i++) {
+        var n = src.childNodes[i];
+        if (n.nodeType === 3) { dst.appendChild(document.createTextNode(n.nodeValue)); continue; }
+        if (n.nodeType !== 1) continue;   // comments etc.
+        var tag = n.nodeName.toUpperCase().replace(/^.*:/, "");   // Word's o:p, w:... become p, ...
+        if (/^(SCRIPT|STYLE|META|LINK|TITLE|HEAD|XML|IFRAME|OBJECT|EMBED|SVG|IMG|VIDEO|AUDIO|CANVAS|FORM|INPUT|BUTTON|TEXTAREA|SELECT)$/.test(tag)) continue;
+        var map = { H1: "h2", H2: "h2", H3: "h3", H4: "h3", H5: "h3", H6: "h3", P: "p", DIV: "p", CENTER: "p",
+          B: "strong", STRONG: "strong", I: "em", EM: "em", U: "u", UL: "ul", OL: "ol", LI: "li", BR: "br", A: "a" };
+        var t = map[tag];
+        if (!t && tag === "SPAN") {   // Word marks bold / italic with styles on <span>
+          var st = (n.getAttribute("style") || "").toLowerCase().replace(/\s/g, "");
+          if (/mso-list:ignore/.test(st)) continue;   // Word's typed bullet "·" / "1." — a real list is made below
+          if (/font-weight:(bold|[6-9]00)/.test(st)) t = "strong";
+          else if (/font-style:italic/.test(st)) t = "em";
+        }
+        if (!t) { walk(n, dst); continue; }   // unknown: keep the words, drop the tag
+        // A <div> that only wraps other blocks (or a block inside a paragraph) adds nothing: keep its insides
+        if (t === "p" && (dst.nodeName === "P" || dst.nodeName === "H2" || dst.nodeName === "H3" || dst.nodeName === "LI" ||
+            (tag === "DIV" && n.querySelector("p, div, h1, h2, h3, h4, h5, h6, ul, ol")))) {
+          if (tag === "DIV" && isCentered(n) && dst === out) {   // a centered wrapper: center what is inside
+            var holder = document.createElement("div");
+            walk(n, holder);
+            Array.prototype.slice.call(holder.childNodes).forEach(function (c) {
+              if (c.nodeType === 1 && /^(P|H2|H3)$/.test(c.nodeName)) c.className = "center";
+              dst.appendChild(c);
+            });
+          } else {
+            walk(n, dst);
+          }
+          continue;
+        }
+        var e = document.createElement(t);
+        if ((t === "p" || t === "h2" || t === "h3") && (tag === "CENTER" || isCentered(n))) e.className = "center";
+        // Word list lines arrive as paragraphs marked "MsoListParagraph…": remember them
+        if (t === "p" && /^MsoListParagraph/i.test(n.getAttribute("class") || "")) e.setAttribute("data-li", "1");
+        if (t === "a") {
+          var href = n.getAttribute("href") || "";
+          if (!/^(https?:|mailto:)/i.test(href)) { walk(n, dst); continue; }
+          e.setAttribute("href", href);
+          e.setAttribute("target", "_blank");
+          e.setAttribute("rel", "noopener");
+        }
+        if (t !== "br") walk(n, e);
+        dst.appendChild(e);
+      }
+    }
+    walk(doc.body.firstChild || doc.body, out);
+    // Word list lines next to each other → one bullet list
+    var kids = Array.prototype.slice.call(out.childNodes), list = null;
+    kids.forEach(function (k) {
+      if (k.nodeType === 1 && k.getAttribute && k.getAttribute("data-li")) {
+        if (!list) { list = document.createElement("ul"); out.insertBefore(list, k); }
+        var li = document.createElement("li");
+        while (k.firstChild) li.appendChild(k.firstChild);
+        list.appendChild(li);
+        out.removeChild(k);
+      } else if (!(k.nodeType === 3 && !k.nodeValue.trim())) {
+        list = null;
+      }
+    });
+    // Loose words directly in the page → wrap them in a paragraph
+    Array.prototype.slice.call(out.childNodes).forEach(function (k) {
+      if ((k.nodeType === 3 && k.nodeValue.trim()) || (k.nodeType === 1 && /^(STRONG|EM|U|A|BR)$/.test(k.nodeName))) {
+        var prev = k.previousSibling;
+        if (prev && prev.nodeType === 1 && prev.nodeName === "P" && prev.getAttribute("data-loose")) { prev.appendChild(k); return; }
+        var p = document.createElement("p");
+        p.setAttribute("data-loose", "1");
+        out.insertBefore(p, k);
+        p.appendChild(k);
+      } else if (k.nodeType === 3) {
+        out.removeChild(k);   // spaces / line breaks between blocks
+      }
+    });
+    var marked = out.querySelectorAll("[data-li], [data-loose]");
+    for (var q = 0; q < marked.length; q++) { marked[q].removeAttribute("data-li"); marked[q].removeAttribute("data-loose"); }
+    // remove empty bold / italic, and trailing empty paragraphs (empty lines in the middle are kept as spacing)
+    var empties = out.querySelectorAll("strong, em, u");
+    for (var k = empties.length - 1; k >= 0; k--) {
+      if (!empties[k].textContent.trim() && !empties[k].querySelector("br")) empties[k].parentNode.removeChild(empties[k]);
+    }
+    while (out.lastChild && out.lastChild.nodeType === 1 && /^(P|H2|H3)$/.test(out.lastChild.nodeName) &&
+           !out.lastChild.textContent.replace(/ /g, " ").trim()) out.removeChild(out.lastChild);
+    while (out.firstChild && out.firstChild.nodeType === 1 && /^(P|H2|H3)$/.test(out.firstChild.nodeName) &&
+           !out.firstChild.textContent.replace(/ /g, " ").trim()) out.removeChild(out.firstChild);
+    // an empty line in the middle keeps its space (an empty paragraph would shrink to nothing)
+    var blanks = out.querySelectorAll("p, h2, h3, li");
+    for (var z = 0; z < blanks.length; z++) {
+      if (!blanks[z].textContent.replace(/ /g, " ").trim() && !blanks[z].querySelector("br")) {
+        blanks[z].innerHTML = "";
+        blanks[z].appendChild(document.createElement("br"));
+      }
+    }
+    return out.innerHTML.trim();
+  }
+  function textToHtml(text) {   // plain text → paragraphs
+    return String(text || "").split(/\n{2,}/).map(function (p) {
+      var d = document.createElement("p");
+      d.textContent = p.trim();
+      return d.outerHTML.replace(/\n/g, "<br>");
+    }).join("");
+  }
+
+  // ---------- reading the About page ----------
+  function readAboutCache() { try { return JSON.parse(localStorage.getItem(ABOUT_CACHE) || "null"); } catch (err) { return null; } }
+  function writeAboutCache(d) { try { localStorage.setItem(ABOUT_CACHE, JSON.stringify(d)); } catch (err) { /* private mode */ } }
+  // Newest About text: website copy, unless this device saved something newer
+  function loadAbout() {
+    var cache = readAboutCache();
+    return fetch(ABOUT_FILE + "?v=" + Date.now(), { cache: "no-store" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .catch(function () { return null; })
+      .then(function (site) {
+        if (cache && (!site || (cache.savedAt || "") > (site.savedAt || ""))) return cache;
+        if (site) writeAboutCache(site);
+        return site;
+      });
+  }
+
+  // ---------- the About window (everyone) ----------
+  function openAbout(note) {
+    openPopup("About", [el("p", "lock-intro", "Loading…")], false, true);
+    popupBox.classList.add("popup-about");
+    loadAbout().then(function (about) {
+      if (popupTitle.textContent !== "About") return;   // window was closed / changed meanwhile
+      popupBody.innerHTML = "";
+      var content = el("div", "about-content");
+      popupBody.appendChild(content);
+      var html = about && about.html ? cleanHtml(about.html) : "";   // cleaned again before showing, to be safe
+      if (html) {
+        var txt = el("div", "about-text");
+        txt.innerHTML = html;
+        content.appendChild(txt);
+      } else {
+        content.appendChild(el("p", "tech-empty", "Nothing here yet."));
+      }
+      // Edit (password) at the bottom
+      var foot = el("div", "about-foot");
+      if (note) foot.appendChild(el("p", "set-msg ok", note));
+      var edit = el("button", "about-editbtn", "Edit");
+      edit.type = "button";
+      edit.addEventListener("click", function () {
+        withUnlock("About", "edit the About page", openAboutEditor);
+      });
+      foot.appendChild(edit);
+      popupBody.appendChild(foot);
+    });
+  }
+
+  // ---------- the About editor (password) ----------
+  function openAboutEditor() {
+    openPopup("About", [el("p", "lock-intro", "Getting the newest About page from GitHub…")], false, true);
+    popupBox.classList.add("popup-about");
+    ghReadFile(sessionToken, ABOUT_FILE).then(function (file) {
+      showAboutEditor(file ? file.data : null);
+    }).catch(function (err) {
+      popupBody.innerHTML = "";
+      var form = el("div", "lock-form");
+      form.appendChild(el("p", "set-msg", ghMessage(err, "get the About page")));
+      var retry = lockButton("Try again", "lock-btn lock-main");
+      retry.addEventListener("click", openAboutEditor);
+      form.appendChild(retry);
+      popupBody.appendChild(form);
+    });
+  }
+
+  function showAboutEditor(current) {
+    popupBody.innerHTML = "";
+    var bar = el("div", "about-toolbar");
+    var area = el("div", "about-editor about-text");
+    area.contentEditable = "true";
+    area.setAttribute("role", "textbox");
+    area.setAttribute("aria-multiline", "true");
+    area.setAttribute("aria-label", "About text");
+    area.innerHTML = (current && current.html ? cleanHtml(current.html) : "") || "<p><br></p>";
+    function tool(label, title, fn) {
+      var b = el("button", "about-tool", label);
+      b.type = "button";
+      b.title = title;
+      b.setAttribute("aria-label", title);
+      b.addEventListener("mousedown", function (e) { e.preventDefault(); });   // keep the text selected
+      b.addEventListener("click", function () { area.focus(); fn(); });
+      bar.appendChild(b);
+    }
+    function block(tag) {
+      var now = String(document.queryCommandValue("formatBlock") || "").toLowerCase();
+      document.execCommand("formatBlock", false, now === tag ? "<p>" : "<" + tag + ">");
+    }
+    tool("Heading", "Heading", function () { block("h2"); });
+    tool("Subheading", "Subheading", function () { block("h3"); });
+    tool("B", "Bold", function () { document.execCommand("bold"); });
+    tool("I", "Italic", function () { document.execCommand("italic"); });
+    tool("• List", "Bullet list", function () { document.execCommand("insertUnorderedList"); });
+    tool("1. List", "Numbered list", function () { document.execCommand("insertOrderedList"); });
+    tool("Center", "Center the line (click again for left)", function () {
+      document.execCommand(document.queryCommandState("justifyCenter") ? "justifyLeft" : "justifyCenter");
+    });
+    tool("Plain", "Remove formatting from the selected text", function () {
+      document.execCommand("removeFormat"); document.execCommand("formatBlock", false, "<p>");
+    });
+    // Pasting from Word / Pages / a web page keeps only the simple formatting
+    area.addEventListener("paste", function (e) {
+      var cd = e.clipboardData || window.clipboardData;
+      if (!cd) return;
+      e.preventDefault();
+      var html = cd.getData("text/html");
+      var clean = html ? cleanHtml(html) : textToHtml(cd.getData("text/plain"));
+      pasteBlocks(area, clean);
+    });
+    popupBody.appendChild(bar);
+    popupBody.appendChild(area);
+    popupBody.appendChild(el("p", "about-hint",
+      "Tip: you can copy text from Word or Pages and paste it here — headings, bold, lists and centered lines are kept."));
+
+    // --- Bottom: Cancel / Save ---
+    var foot = el("div", "about-foot");
+    var msg = el("p", "set-msg");
+    var cancel = el("button", "set-edit", "Cancel");
+    var save = el("button", "set-save", "Save");
+    cancel.type = save.type = "button";
+    cancel.addEventListener("click", function () { openAbout(); });
+    save.addEventListener("click", function () {
+      msg.classList.remove("ok");
+      var data = { savedAt: new Date().toISOString(), html: cleanHtml(area.innerHTML) };
+      save.disabled = cancel.disabled = true;
+      msg.classList.add("busy");
+      msg.textContent = "Saving to GitHub…";
+      ghShaOf(ABOUT_FILE).then(function (sha) {
+        return ghWriteRaw(ABOUT_FILE, textToB64(JSON.stringify(data, null, 2) + "\n"), sha, "Update About page");
+      }).then(function () {
+        writeAboutCache(data);
+        openAbout("Saved. Your other devices show it the next time the tool is opened or reloaded (usually 1–2 minutes).");
+      }).catch(function (err) {
+        save.disabled = cancel.disabled = false;
+        msg.classList.remove("busy");
+        msg.textContent = ghMessage(err, "save") + " Nothing was lost — your text is still here.";
+      });
+    });
+    foot.appendChild(msg);
+    foot.appendChild(cancel);
+    foot.appendChild(save);
+    popupBody.appendChild(foot);
+    area.focus();
+  }
+
+  // Put pasted paragraphs / headings / lists where the cursor is, as separate lines.
+  // (The browser's own paste would squeeze them all into the line the cursor is in,
+  // e.g. turn every pasted paragraph into one big heading.)
+  function pasteBlocks(area, clean) {
+    var sel = window.getSelection();
+    if (!sel || !sel.rangeCount) { area.insertAdjacentHTML("beforeend", clean); return; }
+    var range = sel.getRangeAt(0);
+    if (!area.contains(range.commonAncestorContainer)) { area.insertAdjacentHTML("beforeend", clean); return; }
+    range.deleteContents();
+    var holder = document.createElement("div");
+    holder.innerHTML = clean;
+    var nodes = Array.prototype.slice.call(holder.childNodes);
+    if (!nodes.length) return;
+    var blockTags = /^(P|H2|H3|UL|OL)$/;
+    // Only one plain paragraph: put its words right at the cursor
+    if (nodes.length === 1 && nodes[0].nodeName === "P" && !nodes[0].className) {
+      var frag = document.createDocumentFragment(), lastIn = null;
+      while (nodes[0].firstChild) { lastIn = nodes[0].firstChild; frag.appendChild(lastIn); }
+      range.insertNode(frag);
+      if (lastIn) { range.setStartAfter(lastIn); range.collapse(true); sel.removeAllRanges(); sel.addRange(range); }
+      return;
+    }
+    // Find the line (block) the cursor is in
+    var b = range.startContainer;
+    while (b && b !== area && !(b.nodeType === 1 && /^(P|H2|H3|LI|DIV)$/.test(b.nodeName))) b = b.parentNode;
+    if (!b || b === area) {   // cursor is directly in the box: just insert
+      var f2 = document.createDocumentFragment();
+      nodes.forEach(function (n) { f2.appendChild(n); });
+      range.insertNode(f2);
+    } else {
+      if (b.nodeName === "LI") b = b.parentNode;   // inside a list: put the paste after the whole list
+      // Split the line at the cursor: the part after the cursor moves below the pasted lines
+      var tailRange = document.createRange();
+      tailRange.setStart(range.startContainer, range.startOffset);
+      tailRange.setEnd(b, b.childNodes.length);
+      var tail = b.nodeName === "UL" || b.nodeName === "OL" ? null : b.cloneNode(false);
+      if (tail) tail.appendChild(tailRange.extractContents());
+      var after = b;
+      nodes.forEach(function (n) {
+        if (!(n.nodeType === 1 && blockTags.test(n.nodeName))) { var p = document.createElement("p"); p.appendChild(n); n = p; }
+        after.parentNode.insertBefore(n, after.nextSibling);
+        after = n;
+      });
+      if (tail && tail.textContent.trim()) after.parentNode.insertBefore(tail, after.nextSibling);
+      if (!b.textContent.replace(/ /g, " ").trim() && b.nodeName !== "UL" && b.nodeName !== "OL") b.parentNode.removeChild(b);
+    }
+    // Cursor at the end of the pasted text
+    var last = nodes[nodes.length - 1];
+    var end = document.createRange();
+    end.selectNodeContents(last.parentNode ? last : area);
+    end.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(end);
+  }
+
+  // Current version id of a file on GitHub (null if it isn't there yet)
+  function ghShaOf(path) {
+    return gh(sessionToken, "GET", "/contents/" + path + "?ref=" + encodeURIComponent(SYNC.branch)).then(function (r) {
+      if (r.status === 404) return null;
+      if (!r.ok) throw ghError(r.status);
+      return r.json().then(function (j) { return j.sha || null; });
+    });
+  }
+  function ghWriteRaw(path, b64, sha, message) {
+    var body = { message: message, content: b64, branch: SYNC.branch };
+    if (sha) body.sha = sha;
+    return gh(sessionToken, "PUT", "/contents/" + path, body).then(function (r) {
+      if (!r.ok) throw ghError(r.status);
+      return r.json();
+    });
+  }
+  document.getElementById("about").addEventListener("click", function () { openAbout(); });
+
+
   // CHANGED: a technique first TAKES dots away from the OTHER corner's slider.
   // Only the dots left over are added to the chosen corner's slider.
-  // Example: Red Damage / Impact at 8, Blue technique worth 8 → Red back to 0, Blue stays 0.
+  // Example: Red Impact / Damage at 8, Blue technique worth 8 → Red back to 0, Blue stays 0.
   //          Red at 3, Blue technique worth 5 → Red to 0, Blue to 2.
   // Moves one usable dot at a time, skipping line dots (same as the arrow keys).
   // Stops at the last usable dot. Only this slider changes (Dominance / Duration are not touched).
@@ -1651,6 +2283,7 @@
     roundBtns[rb].addEventListener("click", function () {
       var m = Number(this.getAttribute("data-min"));
       if (m === state.roundMin) return;
+      roundTouched = true;   // NEW: the saved round length no longer changes it
       state.roundMin = m;
       CFG.sliders.forEach(function (s) {
         if (s.valueFormat === "time") state.values[s.id] = { red: 0, blue: 0 };
@@ -1664,6 +2297,10 @@
   // CHANGED: the last shared list this device saw (opens instantly, works offline) ...
   var cachedShared = readCache();
   if (cachedShared) applyShared(cachedShared);
+  // NEW: the last Duration settings this device saw, and the round length to open with
+  var cachedSettings = readSettingsCache();
+  if (cachedSettings) applySettings(cachedSettings);
+  state.roundMin = CFG.roundLength.defaultMinutes;
   buildMain();
   buildGuidelineText();
   buildSliders();
@@ -1674,4 +2311,5 @@
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitToScreen);
   // CHANGED: ... then get the newest shared list (techniques.json) from the website
   fetchSharedFromSite();
+  fetchSettingsFromSite();   // NEW: newest Duration settings
 })();
