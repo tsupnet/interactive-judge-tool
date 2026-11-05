@@ -1,0 +1,23 @@
+{
+  "savedAt": "2026-11-05T23:25:52.613Z",
+  "duration": {
+    "levels": {
+      "High": {
+        "startSec": 0,
+        "endSec": 90
+      },
+      "Med": {
+        "startSec": 90,
+        "endSec": 210
+      },
+      "Low": {
+        "startSec": 0,
+        "endSec": 300
+      }
+    },
+    "startDot": 1,
+    "endDot": 11,
+    "afterRate": 0.3333333333333333,
+    "defaultMinutes": 5
+  }
+}
