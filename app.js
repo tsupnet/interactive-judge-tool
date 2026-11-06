@@ -491,9 +491,11 @@
   // See durationRules in config.js for the meaning of the numbers.
   function durationNeedle(sec, levelName) {
     var R = CFG.durationRules;
-    var L = levelName && R.levels[levelName];
+    // CHANGED: a 3-minute round has its own windows (levels3); a 5-minute round uses levels
+    var three = state.roundMin === 3 && R.levels3 && R.levels3[levelName];
+    var L = levelName && (three ? R.levels3[levelName] : R.levels[levelName]);
     if (!L) return 0;
-    var scale = state.roundMin * 60 / CFG.roundLength.fullRoundSeconds;   // 3-minute round = 0.6
+    var scale = three ? 1 : state.roundMin * 60 / CFG.roundLength.fullRoundSeconds;
     var s = L.startSec * scale, e = L.endSec * scale;
     var perSec = (R.endDot - R.startDot) / (e - s);                       // needle dots per second inside the window
     if (sec < s) return 0;   // CHANGED: before the window starts, the needle stays at Draw
@@ -1442,48 +1444,61 @@
   function copyDuration(d) { return JSON.parse(JSON.stringify(d)); }
   function currentDuration() {
     var R = CFG.durationRules;
-    return copyDuration({ levels: R.levels, startDot: R.startDot, endDot: R.endDot, afterRate: R.afterRate,
-      defaultMinutes: CFG.roundLength.defaultMinutes });
+    return copyDuration({ levels: R.levels, levels3: R.levels3 || scaledLevels(R.levels),
+      startDot: R.startDot, endDot: R.endDot, afterRate: R.afterRate });
   }
+  // 5-minute windows × 3/5, to the nearest 6 seconds (used when no 3-minute windows were saved yet)
+  function scaledLevels(levels) {
+    var out = {};
+    LEVEL_KEYS.forEach(function (k) {
+      var a = Math.round(levels[k].startSec * 0.6 / SEC_STEP) * SEC_STEP;
+      var b = Math.min(180, Math.round(levels[k].endSec * 0.6 / SEC_STEP) * SEC_STEP);
+      if (b <= a) b = Math.min(180, a + SEC_STEP);
+      if (b <= a) a = b - SEC_STEP;
+      out[k] = { startSec: a, endSec: b };
+    });
+    return out;
+  }
+  var durRound = 5;            // which round's windows the Duration tab is showing (5 or 3)
   var gearTab = "tech";        // which tab of the gear window is showing: "tech" or "duration"
   var durDraft = null, durOrig = null, settingsSha = null, roundTouched = false;
 
   // Check numbers from settings.json; anything broken → null (the tool keeps what it has)
   function cleanDuration(d) {
     if (!d || typeof d !== "object" || !d.levels) return null;
-    var full = CFG.roundLength.fullRoundSeconds, out = { levels: {} };
-    for (var i = 0; i < LEVEL_KEYS.length; i++) {
-      var L = d.levels[LEVEL_KEYS[i]];
-      if (!L || typeof L.startSec !== "number" || typeof L.endSec !== "number") return null;
-      if (L.startSec < 0 || L.endSec > full || L.endSec <= L.startSec) return null;
-      out.levels[LEVEL_KEYS[i]] = { startSec: Math.round(L.startSec), endSec: Math.round(L.endSec) };
+    function cleanLevels(src, full) {
+      var o = {};
+      for (var i = 0; i < LEVEL_KEYS.length; i++) {
+        var L = src[LEVEL_KEYS[i]];
+        if (!L || typeof L.startSec !== "number" || typeof L.endSec !== "number") return null;
+        if (L.startSec < 0 || L.endSec > full || L.endSec <= L.startSec) return null;
+        o[LEVEL_KEYS[i]] = { startSec: Math.round(L.startSec), endSec: Math.round(L.endSec) };
+      }
+      return o;
     }
+    var out = { levels: cleanLevels(d.levels, CFG.roundLength.fullRoundSeconds) };
+    if (!out.levels) return null;
+    // CHANGED: 3-minute windows (each time 3:00 or less). Older saves have none → 5-minute × 3/5.
+    out.levels3 = d.levels3 ? cleanLevels(d.levels3, 180) : scaledLevels(out.levels);
+    if (!out.levels3) return null;
     if (!(d.startDot >= 1 && d.endDot <= MAIN_STEPS && d.endDot > d.startDot)) return null;
     if (!mainLandable(d.startDot) || !mainLandable(d.endDot)) return null;
     if (!(typeof d.afterRate === "number" && d.afterRate >= 0 && d.afterRate <= 1)) return null;
     out.startDot = Math.round(d.startDot);
     out.endDot = Math.round(d.endDot);
     out.afterRate = d.afterRate;
-    out.defaultMinutes = d.defaultMinutes === 3 ? 3 : 5;
     return out;
   }
   function applySettings(data) {
     var d = cleanDuration(data && data.duration);
     if (!d) return false;
     var R = CFG.durationRules;
-    R.levels = d.levels; R.startDot = d.startDot; R.endDot = d.endDot; R.afterRate = d.afterRate;
-    CFG.roundLength.defaultMinutes = d.defaultMinutes;
+    R.levels = d.levels; R.levels3 = d.levels3; R.startDot = d.startDot; R.endDot = d.endDot; R.afterRate = d.afterRate;
+    // CHANGED (2026-11-05): a saved "defaultMinutes" is ignored; the tool opens on config.js's round length (5 min)
     return true;
   }
   function readSettingsCache() { try { return JSON.parse(localStorage.getItem(SETTINGS_CACHE) || "null"); } catch (err) { return null; } }
   function writeSettingsCache(d) { try { localStorage.setItem(SETTINGS_CACHE, JSON.stringify(d)); } catch (err) { /* private mode */ } }
-  // If nobody has picked a round length or used Duration yet, open with the saved round length
-  function useDefaultRoundLength() {
-    var used = CFG.sliders.some(function (s) { return s.valueFormat === "time" && (state.values[s.id].red || state.values[s.id].blue); });
-    if (roundTouched || used || state.roundMin === CFG.roundLength.defaultMinutes) return;
-    state.roundMin = CFG.roundLength.defaultMinutes;
-    applyRoundLength();
-  }
   // When the page opens: newest settings.json from the website (unless this device saved newer)
   function fetchSettingsFromSite() {
     if (!window.fetch) return;
@@ -1495,7 +1510,6 @@
         if (c && c.savedAt && data.savedAt && c.savedAt > data.savedAt) return;   // ours is newer
         if (applySettings(data)) {
           writeSettingsCache(data);
-          useDefaultRoundLength();
           update();
         }
       })
@@ -1511,25 +1525,80 @@
   }
   function mmss(sec) { var m = Math.floor(sec / 60), s = sec % 60; return m + ":" + (s < 10 ? "0" : "") + s; }
 
-  // A − value + control for any number. fmt = how the value is shown, next/prev = the allowed steps.
-  function valueStepper(label, get, set, next, prev, fmt) {
+  // CHANGED: a − [box] + control. The number can be changed with − / + OR typed in the box.
+  // o.text(v) = the words in the box · o.read(words) = the number typed (null = not understood)
+  // o.fit(v) = the nearest allowed value (null = none) · o.next / o.prev = the − / + steps
+  // o.note(v) = words shown after the box (optional) · o.hint = what to type, for the message
+  function valueStepper(label, get, set, o) {
     var wrap = el("span", "set-stepper dur-stepper");
-    var minus = el("button", "set-step", "−"), val = el("span", "set-val dur-val"), plus = el("button", "set-step", "+");
+    var minus = el("button", "set-step", "−"), plus = el("button", "set-step", "+");
+    var box = el("input", "set-val dur-val");
+    box.type = "text";
+    box.setAttribute("inputmode", o.numeric ? "numeric" : "text");
+    box.setAttribute("aria-label", label);
+    box.autocomplete = "off";
+    box.spellcheck = false;
+    var note = o.note ? el("span", "dur-note") : null;
     minus.type = plus.type = "button";
     minus.setAttribute("aria-label", "Lower: " + label);
     plus.setAttribute("aria-label", "Raise: " + label);
     function show() {
-      val.textContent = fmt(get());
-      minus.disabled = prev(get()) === null;
-      plus.disabled = next(get()) === null;
+      if (document.activeElement !== box) box.value = o.text(get());
+      if (note) note.textContent = o.note(get());
+      minus.disabled = o.prev(get()) === null;
+      plus.disabled = o.next(get()) === null;
     }
-    minus.addEventListener("click", function () { var v = prev(get()); if (v !== null) { set(v); refreshDuration(); } });
-    plus.addEventListener("click", function () { var v = next(get()); if (v !== null) { set(v); refreshDuration(); } });
+    function commit() {
+      var typed = box.value.trim();
+      if (typed === o.text(get())) return;
+      var v = o.read(typed), m = popupBody.querySelector(".dur-msg");
+      if (m) { m.classList.remove("ok"); m.textContent = ""; }
+      if (v === null || isNaN(v)) {
+        if (m) m.textContent = "\u201C" + typed + "\u201D was not understood. " + o.hint;
+        box.value = o.text(get());
+        return;
+      }
+      var f = o.fit(v);
+      if (f === null) { box.value = o.text(get()); return; }
+      if (f !== v && m) m.textContent = "Set to " + o.text(f) + " \u2014 the nearest allowed value.";
+      set(f);
+      box.value = o.text(f);
+      refreshDuration();
+    }
+    box.addEventListener("change", commit);
+    box.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); commit(); box.select(); } });
+    box.addEventListener("focus", function () { box.select(); });
+    minus.addEventListener("click", function () { var v = o.prev(get()); if (v !== null) { set(v); refreshDuration(); } });
+    plus.addEventListener("click", function () { var v = o.next(get()); if (v !== null) { set(v); refreshDuration(); } });
+    wrap.appendChild(minus); wrap.appendChild(box); wrap.appendChild(plus);
+    if (note) wrap.appendChild(note);
     show();
-    wrap.appendChild(minus); wrap.appendChild(val); wrap.appendChild(plus);
     wrap._show = show;
-    wrap._val = val;
+    wrap._val = box;
     return wrap;
+  }
+  // Typed time → seconds: "1:30" → 90, "2" → 120 (minutes), "0:45" → 45
+  function readTime(t) {
+    var m = /^(\d{1,2})(?:[:.](\d{1,2}))?$/.exec(String(t).replace(/\s/g, ""));
+    if (!m) return null;
+    var sec = m[2] === undefined ? 0 : Number(m[2]);
+    if (m[2] !== undefined && m[2].length === 1) sec *= 10;   // "1:3" = 1:30
+    if (sec >= 60) return null;
+    return Number(m[1]) * 60 + sec;
+  }
+  // Nearest allowed time: between lo and hi, on a 6-second step
+  function fitTime(v, lo, hi) {
+    if (hi < lo) return null;
+    var f = Math.round(v / SEC_STEP) * SEC_STEP;
+    return Math.max(lo, Math.min(hi, f));
+  }
+  // Nearest usable main-needle dot between lo and hi (a line dot moves one toward Draw, or up if it must)
+  function fitDot(v, lo, hi) {
+    var p = Math.max(lo, Math.min(hi, Math.round(v)));
+    if (mainLandable(p)) return p;
+    var d = prevLandable(p, lo);
+    if (d !== null) return d;
+    return nextLandable(p, hi);
   }
   function nextLandable(p, limit) { var n = p + 1; while (n <= limit && !mainLandable(n)) n++; return n <= limit ? n : null; }
   function prevLandable(p, limit) { var n = p - 1; while (n >= limit && !mainLandable(n)) n--; return n >= limit ? n : null; }
@@ -1564,28 +1633,45 @@
   function durationNodes() {
     durSteppers = [];
     var nodes = [];
-    var full = CFG.roundLength.fullRoundSeconds;
-    nodes.push(el("p", "dur-intro",
-      "Duration moves the main needle only inside the time window of the fighter's Dominance level. " +
-      "Times are for a 5-minute round; in a 3-minute round every time is multiplied by 3/5 automatically."));
+    // CHANGED (2026-11-05): intro text removed (Tom)
 
-    // 1. Time windows
-    nodes.push(el("div", "set-head", "Time windows (5-minute round)"));
+    // 1. Time windows — CHANGED: one set for 5-minute rounds and one for 3-minute rounds
+    nodes.push(el("div", "set-head", "Time windows"));
+    var pickRow = el("div", "dur-which-row");
+    pickRow.appendChild(el("span", "dur-which-label", "Editing the windows for:"));
+    var pick = el("div", "dur-round dur-which");
+    [5, 3].forEach(function (m) {
+      var b = el("button", "about-tab dur-which-btn" + (durRound === m ? " on" : ""), m + "-minute round");
+      b.type = "button";
+      b.setAttribute("aria-pressed", durRound === m ? "true" : "false");
+      b.addEventListener("click", function () { if (durRound !== m) { durRound = m; redrawSettings(); } });
+      pick.appendChild(b);
+    });
+    pickRow.appendChild(pick);
+    nodes.push(pickRow);
+    var LV = durRound === 3 ? "levels3" : "levels";
+    var full = durRound === 3 ? 180 : CFG.roundLength.fullRoundSeconds;   // 3-minute times stop at 3:00
+    // CHANGED (2026-11-05): blue limit line removed (Tom); the 3:00 / 5:00 limit still applies
+    var timeHint = "Type a time like 1:30 (up to " + mmss(full) + ").";
     var grid = el("div", "dur-grid");
     ["", "Window starts", "Window ends"].forEach(function (h) { grid.appendChild(el("span", "dur-colhead", h)); });
     LEVEL_KEYS.forEach(function (k) {
       grid.appendChild(el("span", "dur-name", LEVEL_NAMES[k]));
-      var L = durDraft.levels[k];
-      var s1 = valueStepper(LEVEL_NAMES[k] + " start",
-        function () { return L.startSec; }, function (v) { L.startSec = v; },
-        function (v) { return v + SEC_STEP <= L.endSec - SEC_STEP ? v + SEC_STEP : null; },
-        function (v) { return v - SEC_STEP >= 0 ? v - SEC_STEP : null; }, mmss);
-      s1._changed = function () { return L.startSec !== durOrig.levels[k].startSec; };
-      var s2 = valueStepper(LEVEL_NAMES[k] + " end",
-        function () { return L.endSec; }, function (v) { L.endSec = v; },
-        function (v) { return v + SEC_STEP <= full ? v + SEC_STEP : null; },
-        function (v) { return v - SEC_STEP >= L.startSec + SEC_STEP ? v - SEC_STEP : null; }, mmss);
-      s2._changed = function () { return L.endSec !== durOrig.levels[k].endSec; };
+      var L = durDraft[LV][k];
+      var s1 = valueStepper(LEVEL_NAMES[k] + " window start (" + durRound + "-minute round)",
+        function () { return L.startSec; }, function (v) { L.startSec = v; }, {
+          text: mmss, read: readTime, hint: timeHint,
+          fit: function (v) { return fitTime(v, 0, L.endSec - SEC_STEP); },
+          next: function (v) { return v + SEC_STEP <= L.endSec - SEC_STEP ? v + SEC_STEP : null; },
+          prev: function (v) { return v - SEC_STEP >= 0 ? v - SEC_STEP : null; } });
+      s1._changed = function () { return L.startSec !== durOrig[LV][k].startSec; };
+      var s2 = valueStepper(LEVEL_NAMES[k] + " window end (" + durRound + "-minute round)",
+        function () { return L.endSec; }, function (v) { L.endSec = v; }, {
+          text: mmss, read: readTime, hint: timeHint,
+          fit: function (v) { return fitTime(v, L.startSec + SEC_STEP, full); },
+          next: function (v) { return v + SEC_STEP <= full ? v + SEC_STEP : null; },
+          prev: function (v) { return v - SEC_STEP >= L.startSec + SEC_STEP ? v - SEC_STEP : null; } });
+      s2._changed = function () { return L.endSec !== durOrig[LV][k].endSec; };
       durSteppers.push(s1, s2);
       grid.appendChild(s1); grid.appendChild(s2);
     });
@@ -1594,19 +1680,24 @@
     // 2. Where the needle is at the start and end of a window
     nodes.push(el("div", "set-head", "Main needle inside a window"));
     var g2 = el("div", "dur-grid dur-grid2");
-    var dotFmt = function (p) { return "dot " + p + " · " + needleDotName(p); };
+    var dotHint = "Type a dot number from 1 to " + MAIN_STEPS + ".";
+    var readDot = function (t) { var m = /\d+/.exec(t); return m ? Number(m[0]) : null; };
     g2.appendChild(el("span", "dur-name", "When a window starts"));
-    var d1 = valueStepper("needle when a window starts",
-      function () { return durDraft.startDot; }, function (v) { durDraft.startDot = v; },
-      function (v) { var n = nextLandable(v, MAIN_STEPS); return n !== null && n < durDraft.endDot ? n : null; },
-      function (v) { return prevLandable(v, 1); }, dotFmt);
+    var d1 = valueStepper("Main needle dot when a window starts",
+      function () { return durDraft.startDot; }, function (v) { durDraft.startDot = v; }, {
+        numeric: true, text: String, read: readDot, hint: dotHint, note: needleDotName,
+        fit: function (v) { var e = prevLandable(durDraft.endDot, 1); return e === null ? null : fitDot(v, 1, e); },
+        next: function (v) { var n = nextLandable(v, MAIN_STEPS); return n !== null && n < durDraft.endDot ? n : null; },
+        prev: function (v) { return prevLandable(v, 1); } });
     d1._changed = function () { return durDraft.startDot !== durOrig.startDot; };
     g2.appendChild(d1);
     g2.appendChild(el("span", "dur-name", "When a window ends"));
-    var d2 = valueStepper("needle when a window ends",
-      function () { return durDraft.endDot; }, function (v) { durDraft.endDot = v; },
-      function (v) { return nextLandable(v, MAIN_STEPS); },
-      function (v) { var n = prevLandable(v, 1); return n !== null && n > durDraft.startDot ? n : null; }, dotFmt);
+    var d2 = valueStepper("Main needle dot when a window ends",
+      function () { return durDraft.endDot; }, function (v) { durDraft.endDot = v; }, {
+        numeric: true, text: String, read: readDot, hint: dotHint, note: needleDotName,
+        fit: function (v) { var b = nextLandable(durDraft.startDot, MAIN_STEPS); return b === null ? null : fitDot(v, b, MAIN_STEPS); },
+        next: function (v) { return nextLandable(v, MAIN_STEPS); },
+        prev: function (v) { var n = prevLandable(v, 1); return n !== null && n > durDraft.startDot ? n : null; } });
     d2._changed = function () { return durDraft.endDot !== durOrig.endDot; };
     g2.appendChild(d2);
     durSteppers.push(d1, d2);
@@ -1628,23 +1719,8 @@
     markSel();
     nodes.push(sel);
 
-    // 4. Round length when the tool opens
-    nodes.push(el("div", "set-head", "Round length when the tool opens"));
-    var rl = el("div", "dur-round");
-    [5, 3].forEach(function (m) {
-      var b = el("button", "about-tab dur-rl" + (durDraft.defaultMinutes === m ? " on" : ""), m + " min");
-      b.type = "button";
-      b.addEventListener("click", function () {
-        durDraft.defaultMinutes = m;
-        var all = rl.querySelectorAll(".dur-rl");
-        for (var i = 0; i < all.length; i++) all[i].classList.toggle("on", all[i] === b);
-        rl.classList.toggle("changed", durDraft.defaultMinutes !== durOrig.defaultMinutes);
-        refreshDuration();
-      });
-      rl.appendChild(b);
-    });
-    rl.classList.toggle("changed", durDraft.defaultMinutes !== durOrig.defaultMinutes);
-    nodes.push(rl);
+    // CHANGED (2026-11-05): the "round length when the tool opens" control was removed —
+    // it was easy to mix up with the 5-minute / 3-minute window switch. The tool opens on 5 min.
 
     // Bottom: note, Restore defaults, Save
     var foot = el("div", "set-foot");
@@ -1703,6 +1779,7 @@
       durOrig = currentDuration();
       durDraft = copyDuration(durOrig);
       gearTab = "tech";
+      durRound = state.roundMin === 3 ? 3 : 5;   // NEW: Duration tab starts on the round now selected
       flashNames = null;
       makeDraft();
       redrawSettings();

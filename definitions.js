@@ -105,16 +105,23 @@ window.FSL_DEFINITIONS = {
      Put your chart picture in the images folder with this exact name. */
   chart: {
     title: "Duration vs. Dominance",
+    // Tom's chart picture (1972 x 1440). The highlight boxes below are measured on
+    // this exact picture; a different picture would need them measured again.
     image: "images/duration-dominance-chart.png",
     /* Yellow box drawn over each group when its word is clicked.
        Numbers are percent of the picture's width (left, width) and
        height (top, height). Measured on the updated chart picture.
        If the picture is replaced with a different layout, these
        numbers must be measured again.                                */
+    /* CHANGED (2026-11-05): measured on Tom's new chart. High includes
+       "Immediate Impact" above it; Low includes "Cumulative Impact".  */
     groups: {
-      "High Impact":   { left: 13.4, width: 72.3, top: 20.0, height: 17.6 },
-      "Medium Impact": { left: 13.4, width: 72.3, top: 41.2, height: 24.0 },
-      "Low Impact":    { left: 13.4, width: 72.3, top: 69.8, height: 14.3 }
+      // CHANGED (2026-11-05): measured on Tom's picture — left and right edges flush
+      // with the inside of the two black vertical lines (pixels 257 and 1693 of 1972).
+      // CHANGED: High and Low start just BELOW "Immediate Impact" / "Cumulative Impact" (blue words + underline stay visible)
+      "High Impact":   { left: 13.03, width: 72.82, top: 20.56, height: 18.94 },
+      "Medium Impact": { left: 13.03, width: 72.82, top: 44.6, height: 22.5 },
+      "Low Impact":    { left: 13.03, width: 72.82, top: 74.24, height: 14.36 }
     },
     body: []   // CHANGED: no text under the chart (the chart has its own text)
   }

@@ -134,6 +134,13 @@ window.FSL_CONFIG = {
       High: { startSec: 0,   endSec: 90  },    // High Dominance: least time needed
       Med:  { startSec: 90,  endSec: 210 },
       Low:  { startSec: 210, endSec: 300 }     // Low Dominance: most time needed
+    },
+    // NEW: separate windows for a 3-minute round (each time 3:00 or less).
+    // Default = the 5-minute windows × 3/5.
+    levels3: {
+      High: { startSec: 0,   endSec: 54  },
+      Med:  { startSec: 54,  endSec: 126 },
+      Low:  { startSec: 126, endSec: 180 }
     }
   },
 
